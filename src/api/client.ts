@@ -162,3 +162,56 @@ export const optimizationApi = {
       body: JSON.stringify(request),
     }),
 };
+
+// Export
+async function fetchBlob(url: string, body: object): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+  const filename = filenameMatch?.[1] ?? 'export';
+
+  return { blob: await response.blob(), filename };
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export const exportApi = {
+  python: async (mechanism: MechanismDict) => {
+    const { blob, filename } = await fetchBlob(`${API_BASE}/export/python`, mechanism);
+    triggerDownload(blob, filename);
+  },
+
+  svg: async (mechanism: MechanismDict) => {
+    const { blob, filename } = await fetchBlob(`${API_BASE}/export/svg`, mechanism);
+    triggerDownload(blob, filename);
+  },
+
+  dxf: async (mechanism: MechanismDict) => {
+    const { blob, filename } = await fetchBlob(`${API_BASE}/export/dxf`, mechanism);
+    triggerDownload(blob, filename);
+  },
+
+  step: async (mechanism: MechanismDict) => {
+    const { blob, filename } = await fetchBlob(`${API_BASE}/export/step`, mechanism);
+    triggerDownload(blob, filename);
+  },
+};

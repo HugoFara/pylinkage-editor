@@ -8,6 +8,7 @@ import { ExampleLoader } from '../sidebar/ExampleLoader';
 import { LinkList } from '../sidebar/LinkList';
 import { CanvasToolbar } from '../canvas/CanvasToolbar';
 import { AnimationControls } from '../sidebar/AnimationControls';
+import { ExportPanel } from '../sidebar/ExportPanel';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -105,6 +106,12 @@ export function DesignSidebar() {
             <div style={styles.statLabel}>Status</div>
           </div>
         </div>
+      </div>
+
+      {/* Export */}
+      <div style={styles.section}>
+        <div style={styles.sectionTitle}>Export</div>
+        <ExportPanel />
       </div>
 
       {/* Link List */}
