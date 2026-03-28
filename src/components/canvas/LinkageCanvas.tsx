@@ -25,11 +25,26 @@ import {
 } from '../../types/mechanism';
 
 // Canvas configuration
-const GRID_SIZE = 50;
+const MIN_SCALE = 0.1;
+const MAX_SCALE = 10;
+const ZOOM_SENSITIVITY = 0.001;
+
+/** Pick a "nice" grid spacing in canvas units for the current zoom level. */
+function computeGridSpacing(scale: number): number {
+  // Target ~50-150 screen pixels between grid lines
+  const idealCanvasSpacing = 80 / scale;
+  const niceSteps = [10, 25, 50, 100, 200, 500, 1000, 2000, 5000];
+  for (const step of niceSteps) {
+    if (step >= idealCanvasSpacing) return step;
+  }
+  return niceSteps[niceSteps.length - 1];
+}
 
 export function LinkageCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const isPanning = useRef(false);
+  const lastPanPos = useRef<{ x: number; y: number } | null>(null);
 
   // Store state
   const mode = useEditorStore((s) => s.mode);
@@ -47,6 +62,10 @@ export function LinkageCanvas() {
   const drawState = useEditorStore((s) => s.drawState);
   const setDrawState = useEditorStore((s) => s.setDrawState);
   const resetDrawState = useEditorStore((s) => s.resetDrawState);
+  const scale = useEditorStore((s) => s.scale);
+  const panOffset = useEditorStore((s) => s.panOffset);
+  const setScale = useEditorStore((s) => s.setScale);
+  const setPanOffset = useEditorStore((s) => s.setPanOffset);
 
   const mechanism = useMechanismStore((s) => s.mechanism);
   const addLink = useMechanismStore((s) => s.addLink);
@@ -91,22 +110,22 @@ export function LinkageCanvas() {
     [loci, lociJointNames, animationFrame]
   );
 
-  // Convert screen to canvas coordinates
+  // Convert screen to canvas coordinates (accounts for zoom and pan)
   const screenToCanvas = useCallback(
     (screenX: number, screenY: number): Position => ({
-      x: screenX - dimensions.width / 2,
-      y: dimensions.height / 2 - screenY,
+      x: (screenX - dimensions.width / 2 - panOffset.x) / scale,
+      y: (dimensions.height / 2 + panOffset.y - screenY) / scale,
     }),
-    [dimensions]
+    [dimensions, scale, panOffset]
   );
 
-  // Convert canvas to screen coordinates
+  // Convert canvas to screen coordinates (accounts for zoom and pan)
   const canvasToScreen = useCallback(
     (canvasX: number, canvasY: number): Position => ({
-      x: canvasX + dimensions.width / 2,
-      y: dimensions.height / 2 - canvasY,
+      x: canvasX * scale + dimensions.width / 2 + panOffset.x,
+      y: dimensions.height / 2 - canvasY * scale + panOffset.y,
     }),
-    [dimensions]
+    [dimensions, scale, panOffset]
   );
 
   // Handle mouse down for draw-link mode
@@ -287,56 +306,207 @@ export function LinkageCanvas() {
     updateJointPosition(joint.id, newPos.x, newPos.y);
   };
 
-  // Render grid
+  // Handle mouse wheel for zoom
+  const handleWheel = useCallback(
+    (e: Konva.KonvaEventObject<WheelEvent>) => {
+      e.evt.preventDefault();
+
+      const stage = e.target.getStage();
+      if (!stage) return;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+
+      // Get canvas position under cursor before zoom
+      const canvasPos = screenToCanvas(pointer.x, pointer.y);
+
+      // Compute new scale
+      const delta = -e.evt.deltaY * ZOOM_SENSITIVITY;
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * (1 + delta)));
+
+      // Adjust pan so the point under cursor stays fixed
+      const newPanX = pointer.x - dimensions.width / 2 - canvasPos.x * newScale;
+      const newPanY = canvasPos.y * newScale - dimensions.height / 2 + pointer.y;
+
+      setScale(newScale);
+      setPanOffset({ x: newPanX, y: newPanY });
+    },
+    [scale, dimensions, screenToCanvas, setScale, setPanOffset]
+  );
+
+  // Handle middle-mouse panning
+  const handlePanStart = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // Middle mouse button (button 1) or space+left click
+      if (e.evt.button === 1) {
+        e.evt.preventDefault();
+        isPanning.current = true;
+        lastPanPos.current = { x: e.evt.clientX, y: e.evt.clientY };
+      }
+    },
+    []
+  );
+
+  const handlePanMove = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      if (!isPanning.current || !lastPanPos.current) return;
+
+      const dx = e.evt.clientX - lastPanPos.current.x;
+      const dy = e.evt.clientY - lastPanPos.current.y;
+      lastPanPos.current = { x: e.evt.clientX, y: e.evt.clientY };
+
+      setPanOffset({ x: panOffset.x + dx, y: panOffset.y + dy });
+    },
+    [panOffset, setPanOffset]
+  );
+
+  const handlePanEnd = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      if (e.evt.button === 1) {
+        isPanning.current = false;
+        lastPanPos.current = null;
+      }
+    },
+    []
+  );
+
+  // Render grid with graduation
   const renderGrid = () => {
     if (!showGrid) return null;
 
-    const lines: JSX.Element[] = [];
+    const elements: JSX.Element[] = [];
     const { width, height } = dimensions;
 
-    // Vertical lines
-    for (let x = 0; x <= width; x += GRID_SIZE) {
-      lines.push(
+    const gridSpacing = computeGridSpacing(scale);
+
+    // Visible canvas bounds
+    const topLeft = screenToCanvas(0, 0);
+    const bottomRight = screenToCanvas(width, height);
+    const minCX = Math.min(topLeft.x, bottomRight.x);
+    const maxCX = Math.max(topLeft.x, bottomRight.x);
+    const minCY = Math.min(topLeft.y, bottomRight.y);
+    const maxCY = Math.max(topLeft.y, bottomRight.y);
+
+    // Snap to grid
+    const startX = Math.floor(minCX / gridSpacing) * gridSpacing;
+    const endX = Math.ceil(maxCX / gridSpacing) * gridSpacing;
+    const startY = Math.floor(minCY / gridSpacing) * gridSpacing;
+    const endY = Math.ceil(maxCY / gridSpacing) * gridSpacing;
+
+    // Origin in screen coords
+    const origin = canvasToScreen(0, 0);
+
+    // Vertical grid lines
+    for (let cx = startX; cx <= endX; cx += gridSpacing) {
+      const sx = canvasToScreen(cx, 0).x;
+      elements.push(
         <Line
-          key={`v-${x}`}
-          points={[x, 0, x, height]}
+          key={`v-${cx}`}
+          points={[sx, 0, sx, height]}
           stroke="#21262d"
           strokeWidth={1}
         />
       );
     }
 
-    // Horizontal lines
-    for (let y = 0; y <= height; y += GRID_SIZE) {
-      lines.push(
+    // Horizontal grid lines
+    for (let cy = startY; cy <= endY; cy += gridSpacing) {
+      const sy = canvasToScreen(0, cy).y;
+      elements.push(
         <Line
-          key={`h-${y}`}
-          points={[0, y, width, y]}
+          key={`h-${cy}`}
+          points={[0, sy, width, sy]}
           stroke="#21262d"
           strokeWidth={1}
         />
       );
     }
 
-    // Center axes
-    lines.push(
+    // Main axes (thicker)
+    elements.push(
       <Line
         key="x-axis"
-        points={[0, height / 2, width, height / 2]}
+        points={[0, origin.y, width, origin.y]}
         stroke="#30363d"
         strokeWidth={2}
       />
     );
-    lines.push(
+    elements.push(
       <Line
         key="y-axis"
-        points={[width / 2, 0, width / 2, height]}
+        points={[origin.x, 0, origin.x, height]}
         stroke="#30363d"
         strokeWidth={2}
       />
     );
 
-    return <Group>{lines}</Group>;
+    // Tick marks and labels on X-axis
+    const tickSize = 6;
+    for (let cx = startX; cx <= endX; cx += gridSpacing) {
+      if (cx === 0) continue; // skip origin
+      const sx = canvasToScreen(cx, 0).x;
+      // Tick mark
+      elements.push(
+        <Line
+          key={`tx-${cx}`}
+          points={[sx, origin.y - tickSize, sx, origin.y + tickSize]}
+          stroke="#484f58"
+          strokeWidth={1}
+        />
+      );
+      // Label
+      elements.push(
+        <Text
+          key={`lx-${cx}`}
+          x={sx - 15}
+          y={origin.y + tickSize + 2}
+          width={30}
+          align="center"
+          text={String(cx)}
+          fontSize={10}
+          fill="#6e7681"
+        />
+      );
+    }
+
+    // Tick marks and labels on Y-axis
+    for (let cy = startY; cy <= endY; cy += gridSpacing) {
+      if (cy === 0) continue; // skip origin
+      const sy = canvasToScreen(0, cy).y;
+      // Tick mark
+      elements.push(
+        <Line
+          key={`ty-${cy}`}
+          points={[origin.x - tickSize, sy, origin.x + tickSize, sy]}
+          stroke="#484f58"
+          strokeWidth={1}
+        />
+      );
+      // Label
+      elements.push(
+        <Text
+          key={`ly-${cy}`}
+          x={origin.x + tickSize + 4}
+          y={sy - 5}
+          text={String(cy)}
+          fontSize={10}
+          fill="#6e7681"
+        />
+      );
+    }
+
+    // Origin label
+    elements.push(
+      <Text
+        key="origin-label"
+        x={origin.x + tickSize + 4}
+        y={origin.y + tickSize + 2}
+        text="0"
+        fontSize={10}
+        fill="#6e7681"
+      />
+    );
+
+    return <Group listening={false}>{elements}</Group>;
   };
 
   // Render loci (trajectory paths)
@@ -556,9 +726,11 @@ export function LinkageCanvas() {
         height={dimensions.height}
         onClick={handleStageClick}
         onTap={handleStageClick}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onMouseDown={(e) => { handlePanStart(e); handleMouseDown(e); }}
+        onMouseMove={(e) => { handlePanMove(e); handleMouseMove(e); }}
+        onMouseUp={(e) => { handlePanEnd(e); handleMouseUp(e); }}
+        onWheel={handleWheel}
+        onContextMenu={(e) => e.evt.preventDefault()}
       >
         <Layer>
           {renderGrid()}

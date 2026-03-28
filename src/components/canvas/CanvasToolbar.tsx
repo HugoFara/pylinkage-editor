@@ -323,6 +323,19 @@ function CollapsibleToolGroup({
 export function CanvasToolbar() {
   const mode = useEditorStore((s) => s.mode);
   const setMode = useEditorStore((s) => s.setMode);
+  const scale = useEditorStore((s) => s.scale);
+  const setScale = useEditorStore((s) => s.setScale);
+  const panOffset = useEditorStore((s) => s.panOffset);
+  const setPanOffset = useEditorStore((s) => s.setPanOffset);
+  const resetView = useEditorStore((s) => s.resetView);
+
+  const zoomBy = (factor: number) => {
+    const newScale = Math.min(10, Math.max(0.1, scale * factor));
+    // Zoom centered on viewport center: adjust panOffset proportionally
+    const ratio = newScale / scale;
+    setPanOffset({ x: panOffset.x * ratio, y: panOffset.y * ratio });
+    setScale(newScale);
+  };
 
   return (
     <div style={styles.container}>
@@ -361,6 +374,33 @@ export function CanvasToolbar() {
           onClick={() => setMode(tool.mode)}
         />
       ))}
+
+      <div style={styles.divider} />
+
+      {/* Zoom controls */}
+      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        <button
+          style={{ ...styles.button, flex: 1, justifyContent: 'center', padding: '6px' }}
+          onClick={() => zoomBy(1.25)}
+          title="Zoom in"
+        >
+          +
+        </button>
+        <button
+          style={{ ...styles.button, flex: 1, justifyContent: 'center', padding: '6px' }}
+          onClick={() => zoomBy(0.8)}
+          title="Zoom out"
+        >
+          -
+        </button>
+      </div>
+      <button
+        style={{ ...styles.button, justifyContent: 'center', padding: '6px', fontSize: '11px' }}
+        onClick={resetView}
+        title="Reset view (Ctrl+0)"
+      >
+        {Math.round(scale * 100)}% Reset
+      </button>
     </div>
   );
 }

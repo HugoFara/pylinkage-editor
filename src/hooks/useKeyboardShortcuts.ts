@@ -32,6 +32,7 @@ export function useKeyboardShortcuts() {
   const setAnimating = useEditorStore((s) => s.setAnimating);
   const selectedLinkId = useEditorStore((s) => s.selectedLinkId);
   const selectLink = useEditorStore((s) => s.selectLink);
+  const resetView = useEditorStore((s) => s.resetView);
 
   const loci = useMechanismStore((s) => s.loci);
   const deleteLink = useMechanismStore((s) => s.deleteLink);
@@ -79,6 +80,13 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Ctrl+0: Reset view
+      if (ctrlOrCmd && key === '0') {
+        event.preventDefault();
+        resetView();
+        return;
+      }
+
       // Ctrl+Z: Undo
       if (ctrlOrCmd && key === 'z' && !shift) {
         event.preventDefault();
@@ -110,6 +118,7 @@ export function useKeyboardShortcuts() {
       selectLink,
       undo,
       redo,
+      resetView,
     ]
   );
 

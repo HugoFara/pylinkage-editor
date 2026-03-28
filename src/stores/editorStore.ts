@@ -41,6 +41,13 @@ interface EditorState {
   setDrawState: (state: Partial<DrawState>) => void;
   resetDrawState: () => void;
 
+  // Zoom and pan
+  scale: number;
+  panOffset: { x: number; y: number };
+  setScale: (scale: number) => void;
+  setPanOffset: (offset: { x: number; y: number }) => void;
+  resetView: () => void;
+
   // View settings
   showLoci: boolean;
   showDimensions: boolean;
@@ -100,6 +107,13 @@ export const useEditorStore = create<EditorState>((set) => ({
       drawState: { ...s.drawState, ...state },
     })),
   resetDrawState: () => set({ drawState: initialDrawState }),
+
+  // Zoom and pan
+  scale: 1,
+  panOffset: { x: 0, y: 0 },
+  setScale: (scale) => set({ scale }),
+  setPanOffset: (panOffset) => set({ panOffset }),
+  resetView: () => set({ scale: 1, panOffset: { x: 0, y: 0 } }),
 
   // View
   showLoci: true,
