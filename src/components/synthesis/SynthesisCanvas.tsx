@@ -1,7 +1,7 @@
 /**
  * Canvas for the Synthesis tab.
  * Click to add precision points (path mode) or poses (motion mode).
- * Previews the selected or hovered solution geometry.
+ * Previews the selected or hovered solution with animation.
  * Supports zoom (wheel), pan (middle-click drag), and dynamic grid.
  */
 
@@ -9,11 +9,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Text, Arrow, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useSynthesisStore } from '../../stores/synthesisStore';
-import type { FourBarSolutionDTO, Position } from '../../types/mechanism';
+import { simulationApi } from '../../api/client';
+import type { Position } from '../../types/mechanism';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 10;
 const ZOOM_SENSITIVITY = 0.001;
+const ANIMATION_FPS = 30;
 
 const POINT_RADIUS = 8;
 const PIVOT_RADIUS = 6;
@@ -25,6 +27,7 @@ const COLORS = {
   crankPivot: '#d29922',
   couplerPivot: '#58a6ff',
   link: '#8b949e',
+  loci: '#58a6ff',
   grid: '#21262d',
   gridAxis: '#30363d',
   label: '#e6edf3',
@@ -48,6 +51,10 @@ export function SynthesisCanvas() {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const lastPanPos = useRef<{ x: number; y: number } | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const lastFrameTime = useRef(0);
+  // Track which solution index the current preview was fetched for
+  const simulatedForIndex = useRef<number | null>(null);
 
   const mode = useSynthesisStore((s) => s.mode);
   const precisionPoints = useSynthesisStore((s) => s.precisionPoints);
@@ -55,12 +62,86 @@ export function SynthesisCanvas() {
   const poses = useSynthesisStore((s) => s.poses);
   const addPose = useSynthesisStore((s) => s.addPose);
   const results = useSynthesisStore((s) => s.results);
-  const selectedSolutionIndex = useSynthesisStore(
-    (s) => s.selectedSolutionIndex
-  );
-  const hoveredSolutionIndex = useSynthesisStore(
-    (s) => s.hoveredSolutionIndex
-  );
+  const selectedSolutionIndex = useSynthesisStore((s) => s.selectedSolutionIndex);
+  const hoveredSolutionIndex = useSynthesisStore((s) => s.hoveredSolutionIndex);
+  const previewFrames = useSynthesisStore((s) => s.previewFrames);
+  const previewJointNames = useSynthesisStore((s) => s.previewJointNames);
+  const previewFrame = useSynthesisStore((s) => s.previewFrame);
+  const setPreview = useSynthesisStore((s) => s.setPreview);
+  const clearPreview = useSynthesisStore((s) => s.clearPreview);
+  const setPreviewFrame = useSynthesisStore((s) => s.setPreviewFrame);
+
+  // Which solution to preview: selected takes priority over hovered
+  const previewIndex = selectedSolutionIndex ?? hoveredSolutionIndex;
+
+  // --- Fetch simulation when preview target changes ---
+  useEffect(() => {
+    if (previewIndex === null || !results || !results.mechanism_dicts[previewIndex]) {
+      clearPreview();
+      simulatedForIndex.current = null;
+      return;
+    }
+
+    // Don't re-fetch if already simulated for this index
+    if (simulatedForIndex.current === previewIndex) return;
+
+    let cancelled = false;
+    const mechDict = results.mechanism_dicts[previewIndex];
+
+    simulationApi.simulateDirect(mechDict).then((simResult) => {
+      if (cancelled) return;
+      if (simResult.is_complete && simResult.frames.length > 0) {
+        setPreview(simResult.frames, simResult.joint_names);
+        simulatedForIndex.current = previewIndex;
+      }
+    }).catch(() => {
+      // Simulation failed (e.g. unbuildable) — show static fallback
+      if (!cancelled) {
+        clearPreview();
+        simulatedForIndex.current = null;
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [previewIndex, results, setPreview, clearPreview]);
+
+  // --- Animation loop ---
+  useEffect(() => {
+    if (!previewFrames || previewFrames.length === 0) {
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    const frameInterval = 1000 / ANIMATION_FPS;
+
+    const animate = (timestamp: number) => {
+      if (timestamp - lastFrameTime.current >= frameInterval) {
+        lastFrameTime.current = timestamp;
+        const frames = useSynthesisStore.getState().previewFrames;
+        if (frames) {
+          const current = useSynthesisStore.getState().previewFrame;
+          setPreviewFrame((current + 1) % frames.length);
+        }
+      }
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [previewFrames, setPreviewFrame]);
+
+  // --- Clear simulation cache when results change ---
+  useEffect(() => {
+    simulatedForIndex.current = null;
+  }, [results]);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -117,7 +198,6 @@ export function SynthesisCanvas() {
     const delta = -e.evt.deltaY * ZOOM_SENSITIVITY;
     const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * (1 + delta)));
 
-    // Keep the point under cursor fixed
     const canvasPos = screenToCanvas(pos.x, pos.y);
     const newPanX = pos.x - dimensions.width / 2 - canvasPos.x * newScale;
     const newPanY = dimensions.height / 2 - pos.y + canvasPos.y * newScale;
@@ -127,7 +207,6 @@ export function SynthesisCanvas() {
   };
 
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    // Middle mouse button for panning
     if (e.evt.button === 1) {
       e.evt.preventDefault();
       setIsPanning(true);
@@ -151,11 +230,10 @@ export function SynthesisCanvas() {
     }
   };
 
-  // Dynamic grid
+  // --- Dynamic grid ---
   const gridSpacing = computeGridSpacing(scale);
   const gridLines: JSX.Element[] = [];
 
-  // Visible canvas range
   const leftCanvas = (0 - dimensions.width / 2 - panOffset.x) / scale;
   const rightCanvas = (dimensions.width - dimensions.width / 2 - panOffset.x) / scale;
   const topCanvas = (dimensions.height / 2 + panOffset.y - 0) / scale;
@@ -170,23 +248,11 @@ export function SynthesisCanvas() {
     const screen = canvasToScreen(cx, 0);
     const isAxis = Math.abs(cx) < gridSpacing * 0.01;
     gridLines.push(
-      <Line
-        key={`gv${cx}`}
-        points={[screen.x, 0, screen.x, dimensions.height]}
-        stroke={isAxis ? COLORS.gridAxis : COLORS.grid}
-        strokeWidth={isAxis ? 1.5 : 0.5}
-      />
+      <Line key={`gv${cx}`} points={[screen.x, 0, screen.x, dimensions.height]} stroke={isAxis ? COLORS.gridAxis : COLORS.grid} strokeWidth={isAxis ? 1.5 : 0.5} />
     );
     if (!isAxis) {
       gridLines.push(
-        <Text
-          key={`tvx${cx}`}
-          x={screen.x + 3}
-          y={canvasToScreen(0, 0).y + 4}
-          text={String(cx)}
-          fontSize={10}
-          fill={COLORS.tickLabel}
-        />
+        <Text key={`tvx${cx}`} x={screen.x + 3} y={canvasToScreen(0, 0).y + 4} text={String(cx)} fontSize={10} fill={COLORS.tickLabel} />
       );
     }
   }
@@ -194,159 +260,157 @@ export function SynthesisCanvas() {
     const screen = canvasToScreen(0, cy);
     const isAxis = Math.abs(cy) < gridSpacing * 0.01;
     gridLines.push(
-      <Line
-        key={`gh${cy}`}
-        points={[0, screen.y, dimensions.width, screen.y]}
-        stroke={isAxis ? COLORS.gridAxis : COLORS.grid}
-        strokeWidth={isAxis ? 1.5 : 0.5}
-      />
+      <Line key={`gh${cy}`} points={[0, screen.y, dimensions.width, screen.y]} stroke={isAxis ? COLORS.gridAxis : COLORS.grid} strokeWidth={isAxis ? 1.5 : 0.5} />
     );
     if (!isAxis) {
       gridLines.push(
-        <Text
-          key={`tvy${cy}`}
-          x={canvasToScreen(0, 0).x + 4}
-          y={screen.y - 12}
-          text={String(cy)}
-          fontSize={10}
-          fill={COLORS.tickLabel}
-        />
+        <Text key={`tvy${cy}`} x={canvasToScreen(0, 0).x + 4} y={screen.y - 12} text={String(cy)} fontSize={10} fill={COLORS.tickLabel} />
       );
     }
   }
 
-  // Render precision points
+  // --- Render precision points ---
   const pointElements = precisionPoints.map((p, i) => {
     const screen = canvasToScreen(p.x, p.y);
     return (
       <Group key={`pp${i}`}>
-        <Circle
-          x={screen.x}
-          y={screen.y}
-          radius={POINT_RADIUS}
-          fill={COLORS.precisionPoint}
-          opacity={0.9}
-        />
-        <Text
-          x={screen.x + 12}
-          y={screen.y - 6}
-          text={`P${i + 1}`}
-          fontSize={12}
-          fill={COLORS.label}
-          fontStyle="bold"
-        />
+        <Circle x={screen.x} y={screen.y} radius={POINT_RADIUS} fill={COLORS.precisionPoint} opacity={0.9} />
+        <Text x={screen.x + 12} y={screen.y - 6} text={`P${i + 1}`} fontSize={12} fill={COLORS.label} fontStyle="bold" />
       </Group>
     );
   });
 
-  // Render poses
+  // --- Render poses ---
   const poseElements = poses.map((p, i) => {
     const screen = canvasToScreen(p.x, p.y);
     const arrowLen = 25;
-    const endX = screen.x + arrowLen * Math.cos(-p.angle);
-    const endY = screen.y + arrowLen * Math.sin(-p.angle);
+    const ex = screen.x + arrowLen * Math.cos(-p.angle);
+    const ey = screen.y + arrowLen * Math.sin(-p.angle);
     return (
       <Group key={`pose${i}`}>
-        <Circle
-          x={screen.x}
-          y={screen.y}
-          radius={POINT_RADIUS}
-          fill={COLORS.pose}
-          opacity={0.9}
-        />
-        <Arrow
-          points={[screen.x, screen.y, endX, endY]}
-          stroke={COLORS.pose}
-          strokeWidth={2}
-          pointerLength={6}
-          pointerWidth={5}
-          fill={COLORS.pose}
-        />
-        <Text
-          x={screen.x + 12}
-          y={screen.y - 6}
-          text={`P${i + 1}`}
-          fontSize={12}
-          fill={COLORS.label}
-          fontStyle="bold"
-        />
+        <Circle x={screen.x} y={screen.y} radius={POINT_RADIUS} fill={COLORS.pose} opacity={0.9} />
+        <Arrow points={[screen.x, screen.y, ex, ey]} stroke={COLORS.pose} strokeWidth={2} pointerLength={6} pointerWidth={5} fill={COLORS.pose} />
+        <Text x={screen.x + 12} y={screen.y - 6} text={`P${i + 1}`} fontSize={12} fill={COLORS.label} fontStyle="bold" />
       </Group>
     );
   });
 
-  // Determine which solution to preview: selected takes priority, else hovered
-  const previewIndex = selectedSolutionIndex ?? hoveredSolutionIndex;
+  // --- Render animated solution preview ---
   const isHoverPreview = previewIndex !== null && selectedSolutionIndex === null;
+  const opacity = isHoverPreview ? 0.6 : 1.0;
 
-  // Render solution preview
-  let solutionElements: JSX.Element[] = [];
-  if (
-    results &&
-    previewIndex !== null &&
-    results.solutions[previewIndex]
-  ) {
-    const sol: FourBarSolutionDTO = results.solutions[previewIndex];
-    const A = canvasToScreen(sol.ground_pivot_a[0], sol.ground_pivot_a[1]);
-    const B = canvasToScreen(sol.crank_pivot_b[0], sol.crank_pivot_b[1]);
-    const C = canvasToScreen(sol.coupler_pivot_c[0], sol.coupler_pivot_c[1]);
-    const D = canvasToScreen(sol.ground_pivot_d[0], sol.ground_pivot_d[1]);
-    const opacity = isHoverPreview ? 0.5 : 1.0;
+  const renderAnimatedPreview = () => {
+    if (previewIndex === null || !results) return null;
 
-    solutionElements = [
-      // Ground link A-D
-      <Line
-        key="sol-ground"
-        points={[A.x, A.y, D.x, D.y]}
-        stroke={COLORS.groundPivot}
-        strokeWidth={4}
-        dash={[8, 4]}
-        opacity={opacity}
-      />,
-      // Crank A-B
-      <Line
-        key="sol-crank"
-        points={[A.x, A.y, B.x, B.y]}
-        stroke={COLORS.crankPivot}
-        strokeWidth={3}
-        opacity={opacity}
-      />,
-      // Coupler B-C
-      <Line
-        key="sol-coupler"
-        points={[B.x, B.y, C.x, C.y]}
-        stroke={COLORS.couplerPivot}
-        strokeWidth={3}
-        opacity={opacity}
-      />,
-      // Rocker D-C
-      <Line
-        key="sol-rocker"
-        points={[D.x, D.y, C.x, C.y]}
-        stroke={COLORS.link}
-        strokeWidth={3}
-        opacity={opacity}
-      />,
-      // Pivots
-      <Circle key="sol-A" x={A.x} y={A.y} radius={PIVOT_RADIUS} fill={COLORS.groundPivot} opacity={opacity} />,
-      <Circle key="sol-D" x={D.x} y={D.y} radius={PIVOT_RADIUS} fill={COLORS.groundPivot} opacity={opacity} />,
-      <Circle key="sol-B" x={B.x} y={B.y} radius={PIVOT_RADIUS} fill={COLORS.crankPivot} opacity={opacity} />,
-      <Circle key="sol-C" x={C.x} y={C.y} radius={PIVOT_RADIUS} fill={COLORS.couplerPivot} opacity={opacity} />,
-      // Labels
-      <Text key="sol-lA" x={A.x + 10} y={A.y - 6} text="A" fontSize={12} fill={COLORS.label} fontStyle="bold" opacity={opacity} />,
-      <Text key="sol-lB" x={B.x + 10} y={B.y - 6} text="B" fontSize={12} fill={COLORS.label} fontStyle="bold" opacity={opacity} />,
-      <Text key="sol-lC" x={C.x + 10} y={C.y - 6} text="C" fontSize={12} fill={COLORS.label} fontStyle="bold" opacity={opacity} />,
-      <Text key="sol-lD" x={D.x + 10} y={D.y - 6} text="D" fontSize={12} fill={COLORS.label} fontStyle="bold" opacity={opacity} />,
-    ];
+    const mechDict = results.mechanism_dicts[previewIndex];
+    if (!mechDict) return null;
 
-    // Render coupler point P if present
-    if (sol.coupler_point) {
-      const P = canvasToScreen(sol.coupler_point[0], sol.coupler_point[1]);
-      solutionElements.push(
-        <Circle key="sol-P" x={P.x} y={P.y} radius={PIVOT_RADIUS + 2} fill={COLORS.precisionPoint} opacity={opacity} />,
-        <Text key="sol-lP" x={P.x + 10} y={P.y - 6} text="P" fontSize={12} fill={COLORS.precisionPoint} fontStyle="bold" opacity={opacity} />,
+    // Build a joint ID → position map from animation frames
+    const jointPositions = new Map<string, Position>();
+
+    if (previewFrames && previewJointNames && previewFrames.length > 0) {
+      const frameIdx = Math.min(previewFrame, previewFrames.length - 1);
+      const frame = previewFrames[frameIdx];
+      for (let j = 0; j < previewJointNames.length; j++) {
+        const pos = frame.positions[j];
+        if (pos) {
+          jointPositions.set(previewJointNames[j], pos);
+        }
+      }
+    }
+
+    // Fallback: use static joint positions from mechanism dict
+    for (const joint of mechDict.joints) {
+      if (!jointPositions.has(joint.id) && joint.position[0] != null && joint.position[1] != null) {
+        jointPositions.set(joint.id, { x: joint.position[0], y: joint.position[1] });
+      }
+    }
+
+    const elements: JSX.Element[] = [];
+
+    // Render links
+    for (const link of mechDict.links) {
+      if (link.joints.length < 2) continue;
+      for (let k = 0; k < link.joints.length - 1; k++) {
+        const p1 = jointPositions.get(link.joints[k]);
+        const p2 = jointPositions.get(link.joints[k + 1]);
+        if (!p1 || !p2) continue;
+
+        const s1 = canvasToScreen(p1.x, p1.y);
+        const s2 = canvasToScreen(p2.x, p2.y);
+
+        let color = COLORS.link;
+        let strokeWidth = 3;
+        const dash: number[] | undefined = undefined;
+        if (link.type === 'ground') {
+          color = COLORS.groundPivot;
+          strokeWidth = 4;
+        } else if (link.type === 'driver' || link.type === 'arc_driver') {
+          color = COLORS.crankPivot;
+        }
+
+        elements.push(
+          <Line
+            key={`link-${link.id}-${k}`}
+            points={[s1.x, s1.y, s2.x, s2.y]}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            dash={link.type === 'ground' ? [8, 4] : dash}
+            opacity={opacity}
+          />
+        );
+      }
+    }
+
+    // Render joints
+    for (const joint of mechDict.joints) {
+      const pos = jointPositions.get(joint.id);
+      if (!pos) continue;
+      const screen = canvasToScreen(pos.x, pos.y);
+
+      let color = COLORS.couplerPivot;
+      if (mechDict.links.some((l) => l.type === 'ground' && l.joints.includes(joint.id))) {
+        color = COLORS.groundPivot;
+      } else if (mechDict.links.some((l) => (l.type === 'driver' || l.type === 'arc_driver') && l.joints.includes(joint.id))) {
+        color = COLORS.crankPivot;
+      }
+
+      elements.push(
+        <Circle key={`joint-${joint.id}`} x={screen.x} y={screen.y} radius={PIVOT_RADIUS} fill={color} opacity={opacity} />
+      );
+      elements.push(
+        <Text key={`label-${joint.id}`} x={screen.x + 10} y={screen.y - 6} text={joint.name ?? joint.id} fontSize={11} fill={COLORS.label} fontStyle="bold" opacity={opacity} />
       );
     }
-  }
+
+    // Render coupler point trajectory (loci) if we have animation frames
+    if (previewFrames && previewJointNames && previewFrames.length > 2) {
+      // Find the coupler point joint (named "P" or last tracker joint)
+      const trackerJoints = mechDict.joints.filter((j) => j.type === 'tracker');
+      const couplerJointId = trackerJoints.length > 0 ? trackerJoints[0].id : null;
+
+      if (couplerJointId) {
+        const lociIdx = previewJointNames.indexOf(couplerJointId);
+        if (lociIdx !== -1) {
+          const lociPoints: number[] = [];
+          for (const frame of previewFrames) {
+            const pos = frame.positions[lociIdx];
+            if (pos) {
+              const s = canvasToScreen(pos.x, pos.y);
+              lociPoints.push(s.x, s.y);
+            }
+          }
+          if (lociPoints.length >= 4) {
+            elements.push(
+              <Line key="coupler-loci" points={lociPoints} stroke={COLORS.loci} strokeWidth={1.5} dash={[4, 3]} opacity={opacity * 0.7} />
+            );
+          }
+        }
+      }
+    }
+
+    return elements;
+  };
 
   // Instruction text
   const instruction =
@@ -370,13 +434,8 @@ export function SynthesisCanvas() {
         style={{ cursor: isPanning ? 'grabbing' : mode === 'function' ? 'default' : 'crosshair' }}
       >
         <Layer>
-          {/* Grid */}
           {gridLines}
-
-          {/* Solution preview */}
-          {solutionElements}
-
-          {/* Points / Poses */}
+          {renderAnimatedPreview()}
           {mode === 'path' && pointElements}
           {mode === 'motion' && poseElements}
         </Layer>

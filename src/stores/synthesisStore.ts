@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import type { SynthesisMode, SynthesisResponse } from '../types/mechanism';
+import type { SimulationFrame, SynthesisMode, SynthesisResponse } from '../types/mechanism';
 
 interface SynthesisState {
   // Current synthesis mode
@@ -44,6 +44,14 @@ interface SynthesisState {
   setHoveredSolution: (index: number | null) => void;
   isRunning: boolean;
   setIsRunning: (v: boolean) => void;
+
+  // Preview animation (simulated frames for hovered/selected solution)
+  previewFrames: SimulationFrame[] | null;
+  previewJointNames: string[] | null;
+  previewFrame: number;
+  setPreview: (frames: SimulationFrame[], jointNames: string[]) => void;
+  clearPreview: () => void;
+  setPreviewFrame: (frame: number) => void;
 
   // Reset all
   clearAll: () => void;
@@ -88,13 +96,21 @@ export const useSynthesisStore = create<SynthesisState>((set) => ({
 
   // Results
   results: null,
-  setResults: (results) => set({ results, selectedSolutionIndex: null, hoveredSolutionIndex: null }),
+  setResults: (results) => set({ results, selectedSolutionIndex: null, hoveredSolutionIndex: null, previewFrames: null, previewJointNames: null, previewFrame: 0 }),
   selectedSolutionIndex: null,
   selectSolution: (selectedSolutionIndex) => set({ selectedSolutionIndex }),
   hoveredSolutionIndex: null,
   setHoveredSolution: (hoveredSolutionIndex) => set({ hoveredSolutionIndex }),
   isRunning: false,
   setIsRunning: (isRunning) => set({ isRunning }),
+
+  // Preview animation
+  previewFrames: null,
+  previewJointNames: null,
+  previewFrame: 0,
+  setPreview: (previewFrames, previewJointNames) => set({ previewFrames, previewJointNames, previewFrame: 0 }),
+  clearPreview: () => set({ previewFrames: null, previewJointNames: null, previewFrame: 0 }),
+  setPreviewFrame: (previewFrame) => set({ previewFrame }),
 
   // Reset
   clearAll: () =>
@@ -105,5 +121,8 @@ export const useSynthesisStore = create<SynthesisState>((set) => ({
       results: null,
       selectedSolutionIndex: null,
       isRunning: false,
+      previewFrames: null,
+      previewJointNames: null,
+      previewFrame: 0,
     }),
 }));
