@@ -6,8 +6,8 @@ import { useEditorStore } from '../../stores/editorStore';
 import type { AppTab } from '../../types/mechanism';
 
 const TABS: { id: AppTab; label: string }[] = [
-  { id: 'design', label: 'Design' },
   { id: 'synthesis', label: 'Synthesis' },
+  { id: 'design', label: 'Design' },
   { id: 'optimize', label: 'Optimize' },
 ];
 

@@ -40,6 +40,8 @@ interface SynthesisState {
   setResults: (results: SynthesisResponse | null) => void;
   selectedSolutionIndex: number | null;
   selectSolution: (index: number | null) => void;
+  hoveredSolutionIndex: number | null;
+  setHoveredSolution: (index: number | null) => void;
   isRunning: boolean;
   setIsRunning: (v: boolean) => void;
 
@@ -86,9 +88,11 @@ export const useSynthesisStore = create<SynthesisState>((set) => ({
 
   // Results
   results: null,
-  setResults: (results) => set({ results, selectedSolutionIndex: null }),
+  setResults: (results) => set({ results, selectedSolutionIndex: null, hoveredSolutionIndex: null }),
   selectedSolutionIndex: null,
   selectSolution: (selectedSolutionIndex) => set({ selectedSolutionIndex }),
+  hoveredSolutionIndex: null,
+  setHoveredSolution: (hoveredSolutionIndex) => set({ hoveredSolutionIndex }),
   isRunning: false,
   setIsRunning: (isRunning) => set({ isRunning }),
 

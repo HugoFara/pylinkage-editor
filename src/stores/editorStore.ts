@@ -67,7 +67,7 @@ const initialDrawState: DrawState = {
 
 export const useEditorStore = create<EditorState>((set) => ({
   // Active tab
-  activeTab: 'design',
+  activeTab: 'synthesis',
   setActiveTab: (activeTab) => set({ activeTab }),
 
   // Mode - default to draw-link for immediate drawing

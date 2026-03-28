@@ -27,6 +27,26 @@ const MODES: { id: SynthesisMode; label: string; description: string }[] = [
   },
 ];
 
+/** Human-readable Grashof labels. */
+function grashofLabel(type: string | null | undefined): { text: string; color: string } {
+  switch (type) {
+    case 'GRASHOF_CRANK_ROCKER':
+      return { text: 'Crank-Rocker', color: '#3fb950' };
+    case 'GRASHOF_DOUBLE_CRANK':
+      return { text: 'Double Crank', color: '#3fb950' };
+    case 'GRASHOF_ROCKER_CRANK':
+      return { text: 'Rocker-Crank', color: '#d29922' };
+    case 'GRASHOF_DOUBLE_ROCKER':
+      return { text: 'Double Rocker', color: '#d29922' };
+    case 'NON_GRASHOF':
+      return { text: 'Non-Grashof', color: '#f85149' };
+    case 'CHANGE_POINT':
+      return { text: 'Change Point', color: '#d29922' };
+    default:
+      return { text: '', color: '#8b949e' };
+  }
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     padding: '16px',
@@ -137,8 +157,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   resultItem: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    gap: '2px',
     padding: '8px',
     background: '#21262d',
     borderRadius: '4px',
@@ -146,10 +166,13 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#e6edf3',
     cursor: 'pointer',
     border: '1px solid transparent',
-    transition: 'border-color 0.15s',
+    transition: 'border-color 0.15s, background 0.15s',
   },
   resultItemSelected: {
     borderColor: '#58a6ff',
+  },
+  resultItemHovered: {
+    background: '#30363d',
   },
   sendButton: {
     padding: '8px 16px',
@@ -283,6 +306,10 @@ export function SynthesisSidebar() {
     (s) => s.selectedSolutionIndex
   );
   const selectSolution = useSynthesisStore((s) => s.selectSolution);
+  const hoveredSolutionIndex = useSynthesisStore(
+    (s) => s.hoveredSolutionIndex
+  );
+  const setHoveredSolution = useSynthesisStore((s) => s.setHoveredSolution);
   const isRunning = useSynthesisStore((s) => s.isRunning);
   const setIsRunning = useSynthesisStore((s) => s.setIsRunning);
 
@@ -507,25 +534,39 @@ export function SynthesisSidebar() {
           ))}
 
           <div style={{ ...styles.pointList, marginTop: '8px' }}>
-            {results.solutions.map((sol, i) => (
-              <div
-                key={i}
-                style={{
-                  ...styles.resultItem,
-                  ...(selectedSolutionIndex === i
-                    ? styles.resultItemSelected
-                    : {}),
-                }}
-                onClick={() => selectSolution(i)}
-              >
-                <span>
-                  <span style={styles.pointIndex}>#{i + 1}</span>
-                  crank={sol.crank_length.toFixed(1)}{' '}
-                  coupler={sol.coupler_length.toFixed(1)}{' '}
-                  rocker={sol.rocker_length.toFixed(1)}
-                </span>
-              </div>
-            ))}
+            {results.solutions.map((sol, i) => {
+              const grashof = grashofLabel(sol.grashof_type);
+              const isSelected = selectedSolutionIndex === i;
+              const isHovered = hoveredSolutionIndex === i;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    ...styles.resultItem,
+                    ...(isSelected ? styles.resultItemSelected : {}),
+                    ...(isHovered && !isSelected ? styles.resultItemHovered : {}),
+                  }}
+                  onClick={() => selectSolution(i)}
+                  onMouseEnter={() => setHoveredSolution(i)}
+                  onMouseLeave={() => setHoveredSolution(null)}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>
+                      <span style={styles.pointIndex}>#{i + 1}</span>
+                      crank={sol.crank_length.toFixed(1)}{' '}
+                      coupler={sol.coupler_length.toFixed(1)}{' '}
+                      rocker={sol.rocker_length.toFixed(1)}
+                    </span>
+                  </div>
+                  {grashof.text && (
+                    <span style={{ fontSize: '10px', color: grashof.color, fontWeight: 500 }}>
+                      {grashof.text}
+                      {sol.grashof_type === 'NON_GRASHOF' && ' — limited rotation'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {selectedSolutionIndex !== null && (

@@ -13,6 +13,7 @@ import {
   generateJointId,
   generateLinkId,
 } from '../../stores/mechanismStore';
+import { useSynthesisStore } from '../../stores/synthesisStore';
 import {
   LINK_COLORS,
   JOINT_COLORS,
@@ -716,6 +717,56 @@ export function LinkageCanvas() {
     });
   };
 
+  // Render synthesis target points as overlay markers
+  const synthesisPrecisionPoints = useSynthesisStore((s) => s.precisionPoints);
+  const synthesisPoses = useSynthesisStore((s) => s.poses);
+  const synthesisMode = useSynthesisStore((s) => s.mode);
+
+  const renderSynthesisTargets = () => {
+    const points = synthesisMode === 'motion'
+      ? synthesisPoses.map((p) => ({ x: p.x, y: p.y }))
+      : synthesisPrecisionPoints;
+
+    if (points.length === 0) return null;
+
+    return points.map((p, i) => {
+      const screen = canvasToScreen(p.x, p.y);
+      return (
+        <Group key={`synth-target-${i}`}>
+          {/* Crosshair marker */}
+          <Line
+            points={[screen.x - 8, screen.y, screen.x + 8, screen.y]}
+            stroke="#f0883e"
+            strokeWidth={1.5}
+            opacity={0.7}
+          />
+          <Line
+            points={[screen.x, screen.y - 8, screen.x, screen.y + 8]}
+            stroke="#f0883e"
+            strokeWidth={1.5}
+            opacity={0.7}
+          />
+          <Circle
+            x={screen.x}
+            y={screen.y}
+            radius={5}
+            stroke="#f0883e"
+            strokeWidth={1.5}
+            opacity={0.7}
+          />
+          <Text
+            x={screen.x + 10}
+            y={screen.y - 6}
+            text={`P${i + 1}`}
+            fontSize={10}
+            fill="#f0883e"
+            opacity={0.7}
+          />
+        </Group>
+      );
+    });
+  };
+
   return (
     <div
       ref={containerRef}
@@ -734,6 +785,7 @@ export function LinkageCanvas() {
       >
         <Layer>
           {renderGrid()}
+          {renderSynthesisTargets()}
           {renderLoci()}
           {renderLinks()}
           {renderDrawPreview()}

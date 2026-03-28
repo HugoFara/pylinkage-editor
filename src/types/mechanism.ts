@@ -185,6 +185,8 @@ export interface FourBarSolutionDTO {
   coupler_length: number;
   rocker_length: number;
   ground_length: number;
+  coupler_point?: number[] | null;
+  grashof_type?: string | null;
 }
 
 export interface SynthesisResponse {
