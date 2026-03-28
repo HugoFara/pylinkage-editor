@@ -195,7 +195,9 @@ export function AnimationControls() {
 
   // Store disconnect in a ref to avoid dependency issues
   const disconnectRef = useRef(stream.disconnect);
-  disconnectRef.current = stream.disconnect;
+  useEffect(() => {
+    disconnectRef.current = stream.disconnect;
+  }, [stream.disconnect]);
 
   // Cleanup WebSocket on unmount
   useEffect(() => {

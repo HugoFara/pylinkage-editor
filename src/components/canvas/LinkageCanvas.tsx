@@ -184,7 +184,7 @@ export function LinkageCanvas() {
   };
 
   // Handle mouse up for draw-link mode - creates link directly without modal
-  const handleMouseUp = (_e: Konva.KonvaEventObject<MouseEvent>) => {
+  const handleMouseUp = () => {
     if (mode !== 'draw-link' || !drawState.isDrawing) return;
 
     const { startPoint, endPoint, snappedToJoint, snappedEndJoint } = drawState;
@@ -728,7 +728,7 @@ export function LinkageCanvas() {
         onTap={handleStageClick}
         onMouseDown={(e) => { handlePanStart(e); handleMouseDown(e); }}
         onMouseMove={(e) => { handlePanMove(e); handleMouseMove(e); }}
-        onMouseUp={(e) => { handlePanEnd(e); handleMouseUp(e); }}
+        onMouseUp={(e) => { handlePanEnd(e); handleMouseUp(); }}
         onWheel={handleWheel}
         onContextMenu={(e) => e.evt.preventDefault()}
       >
