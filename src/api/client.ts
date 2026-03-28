@@ -12,6 +12,10 @@ import type {
   SynthesisResponse,
   TrajectoryResponse,
 } from '../types/mechanism';
+import type {
+  OptimizationRequest,
+  OptimizationResponse,
+} from '../types/optimization';
 
 const API_BASE = '/api';
 
@@ -147,5 +151,14 @@ export const synthesisApi = {
         poses,
         ...options,
       }),
+    }),
+};
+
+// Optimization
+export const optimizationApi = {
+  optimize: (request: OptimizationRequest) =>
+    fetchJson<OptimizationResponse>(`${API_BASE}/optimization`, {
+      method: 'POST',
+      body: JSON.stringify(request),
     }),
 };

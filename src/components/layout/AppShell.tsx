@@ -9,6 +9,8 @@ import { DesignSidebar } from './DesignSidebar';
 import { LinkageCanvas } from '../canvas/LinkageCanvas';
 import { SynthesisSidebar } from '../synthesis/SynthesisSidebar';
 import { SynthesisCanvas } from '../synthesis/SynthesisCanvas';
+import { OptimizationSidebar } from '../optimization/OptimizationSidebar';
+import { OptimizationCanvas } from '../optimization/OptimizationCanvas';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -51,31 +53,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     background: '#0d1117',
   },
-  placeholder: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    color: '#8b949e',
-    fontSize: '16px',
-  },
 };
-
-function PlaceholderSidebar({ label }: { label: string }) {
-  return (
-    <div style={{ padding: '16px', color: '#8b949e', fontSize: '13px' }}>
-      {label} controls will appear here.
-    </div>
-  );
-}
-
-function PlaceholderMain({ label }: { label: string }) {
-  return (
-    <div style={styles.placeholder}>
-      {label} — coming soon
-    </div>
-  );
-}
 
 export function AppShell() {
   const activeTab = useEditorStore((s) => s.activeTab);
@@ -91,13 +69,13 @@ export function AppShell() {
         <div style={styles.sidebarContent}>
           {activeTab === 'design' && <DesignSidebar />}
           {activeTab === 'synthesis' && <SynthesisSidebar />}
-          {activeTab === 'optimize' && <PlaceholderSidebar label="Optimize" />}
+          {activeTab === 'optimize' && <OptimizationSidebar />}
         </div>
       </aside>
       <main style={styles.main}>
         {activeTab === 'design' && <LinkageCanvas />}
         {activeTab === 'synthesis' && <SynthesisCanvas />}
-        {activeTab === 'optimize' && <PlaceholderMain label="Optimization" />}
+        {activeTab === 'optimize' && <OptimizationCanvas />}
       </main>
     </div>
   );
