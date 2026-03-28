@@ -7,7 +7,6 @@ import { useEditorStore } from '../../stores/editorStore';
 import { TabBar } from './TabBar';
 import { DesignSidebar } from './DesignSidebar';
 import { LinkageCanvas } from '../canvas/LinkageCanvas';
-import { ExamplesPanel } from '../examples/ExamplesPanel';
 import { SynthesisSidebar } from '../synthesis/SynthesisSidebar';
 import { SynthesisCanvas } from '../synthesis/SynthesisCanvas';
 
@@ -91,19 +90,12 @@ export function AppShell() {
         <TabBar />
         <div style={styles.sidebarContent}>
           {activeTab === 'design' && <DesignSidebar />}
-          {activeTab === 'examples' && (
-            <div style={{ padding: '16px', color: '#8b949e', fontSize: '13px' }}>
-              Browse prebuilt mechanisms. Click <strong style={{ color: '#e6edf3' }}>Load &amp; Edit</strong> to
-              open one in the Design tab.
-            </div>
-          )}
           {activeTab === 'synthesis' && <SynthesisSidebar />}
           {activeTab === 'optimize' && <PlaceholderSidebar label="Optimize" />}
         </div>
       </aside>
       <main style={styles.main}>
         {activeTab === 'design' && <LinkageCanvas />}
-        {activeTab === 'examples' && <ExamplesPanel />}
         {activeTab === 'synthesis' && <SynthesisCanvas />}
         {activeTab === 'optimize' && <PlaceholderMain label="Optimization" />}
       </main>

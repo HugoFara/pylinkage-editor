@@ -7,7 +7,6 @@ import type { AppTab } from '../../types/mechanism';
 
 const TABS: { id: AppTab; label: string }[] = [
   { id: 'design', label: 'Design' },
-  { id: 'examples', label: 'Examples' },
   { id: 'synthesis', label: 'Synthesis' },
   { id: 'optimize', label: 'Optimize' },
 ];
@@ -26,12 +25,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '13px',
     fontWeight: 500,
     cursor: 'pointer',
+    outline: 'none',
     borderBottom: '2px solid transparent',
     transition: 'color 0.15s, border-color 0.15s',
   },
   tabActive: {
     color: '#58a6ff',
-    borderBottomColor: '#58a6ff',
+    borderBottom: '2px solid #58a6ff',
   },
 };
 

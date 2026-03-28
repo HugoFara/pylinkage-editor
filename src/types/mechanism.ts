@@ -101,7 +101,7 @@ export interface ExampleInfo {
 }
 
 // Tab types
-export type AppTab = 'design' | 'examples' | 'synthesis' | 'optimize';
+export type AppTab = 'design' | 'synthesis' | 'optimize';
 
 // Editor types (updated for link-first)
 export type EditorMode =
