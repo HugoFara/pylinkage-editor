@@ -60,6 +60,8 @@ export function LinkageCanvas() {
   const showGrid = useEditorStore((s) => s.showGrid);
   const showLoci = useEditorStore((s) => s.showLoci);
   const animationFrame = useEditorStore((s) => s.animationFrame);
+  const setAnimationFrame = useEditorStore((s) => s.setAnimationFrame);
+  const setAnimating = useEditorStore((s) => s.setAnimating);
   const drawState = useEditorStore((s) => s.drawState);
   const setDrawState = useEditorStore((s) => s.setDrawState);
   const resetDrawState = useEditorStore((s) => s.resetDrawState);
@@ -127,6 +129,46 @@ export function LinkageCanvas() {
       y: dimensions.height / 2 - canvasY * scale + panOffset.y,
     }),
     [dimensions, scale, panOffset]
+  );
+
+  // Interact mode: find the simulation frame where the dragged joint
+  // is closest to the cursor, then snap all joints to that frame.
+  const handleInteractDrag = useCallback(
+    (joint: JointDict, node: Konva.Node) => {
+      if (!loci || !lociJointNames || loci.length === 0) return;
+
+      // Stop any running animation
+      setAnimating(false);
+
+      const canvasPos = screenToCanvas(node.x(), node.y());
+      const jointIdx = lociJointNames.indexOf(joint.id);
+      if (jointIdx === -1) return;
+
+      // Find the frame where this joint is closest to the cursor
+      let bestFrame = 0;
+      let bestDist = Infinity;
+      for (let f = 0; f < loci.length; f++) {
+        const pos = loci[f].positions[jointIdx];
+        if (!pos) continue;
+        const dx = pos.x - canvasPos.x;
+        const dy = pos.y - canvasPos.y;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestFrame = f;
+        }
+      }
+      setAnimationFrame(bestFrame);
+
+      // Snap the Konva node to the resolved position (not the cursor)
+      const resolved = loci[bestFrame].positions[jointIdx];
+      if (resolved) {
+        const screenPos = canvasToScreen(resolved.x, resolved.y);
+        node.x(screenPos.x);
+        node.y(screenPos.y);
+      }
+    },
+    [loci, lociJointNames, screenToCanvas, canvasToScreen, setAnimationFrame, setAnimating]
   );
 
   // Handle mouse down for draw-link mode
@@ -680,8 +722,11 @@ export function LinkageCanvas() {
           ? JOINT_STYLES.hoverRadius
           : JOINT_STYLES.radius;
 
-      // Determine if joint is draggable based on mode
-      const isDraggable = mode === 'move-joint';
+      // In interact mode, check if this is a ground joint (not draggable)
+      const isGroundJoint = mechanism.links.some(
+        (l) => l.type === 'ground' && l.joints.includes(joint.id)
+      );
+      const canInteract = mode === 'interact' && !isGroundJoint && !!loci && loci.length > 0;
 
       return (
         <Group key={joint.id}>
@@ -697,12 +742,18 @@ export function LinkageCanvas() {
             onTap={() => handleJointClick(joint)}
             onMouseEnter={() => setHoveredJoint(joint.id)}
             onMouseLeave={() => setHoveredJoint(null)}
-            draggable={isDraggable}
+            draggable={mode === 'move-joint' || canInteract}
+            onDragMove={canInteract ? (e) => handleInteractDrag(joint, e.target) : undefined}
             onDragEnd={(e) => {
-              const newPos = screenToCanvas(e.target.x(), e.target.y());
-              handleJointDrag(joint, newPos);
+              if (mode === 'move-joint') {
+                const newPos = screenToCanvas(e.target.x(), e.target.y());
+                handleJointDrag(joint, newPos);
+              } else if (canInteract) {
+                // Final snap
+                handleInteractDrag(joint, e.target);
+              }
             }}
-            style={{ cursor: mode === 'delete' ? 'not-allowed' : 'pointer' }}
+            style={{ cursor: mode === 'delete' ? 'not-allowed' : mode === 'interact' ? 'grab' : 'pointer' }}
           />
           {/* Joint label */}
           <Text

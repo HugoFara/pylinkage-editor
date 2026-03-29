@@ -108,6 +108,7 @@ export type EditorMode =
   | 'select'
   | 'draw-link'
   | 'move-joint'
+  | 'interact'
   | 'delete'
   // Driver placement modes
   | 'place-crank'

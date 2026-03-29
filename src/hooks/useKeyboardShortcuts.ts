@@ -11,7 +11,8 @@
  * - 1: Draw link mode (default)
  * - 2: Select mode
  * - 3: Move joint mode
- * - 4: Delete mode
+ * - 4: Interact mode
+ * - 5: Delete mode
  */
 
 import { useEffect, useCallback } from 'react';
@@ -23,7 +24,8 @@ const MODE_SHORTCUTS: Record<string, EditorMode> = {
   '1': 'draw-link',
   '2': 'select',
   '3': 'move-joint',
-  '4': 'delete',
+  '4': 'interact',
+  '5': 'delete',
 };
 
 export function useKeyboardShortcuts() {

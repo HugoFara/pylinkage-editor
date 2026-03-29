@@ -94,10 +94,16 @@ const secondaryTools: ToolButton[] = [
     shortcut: '3',
   },
   {
+    mode: 'interact',
+    label: 'Interact',
+    icon: '🎯',
+    shortcut: '4',
+  },
+  {
     mode: 'delete',
     label: 'Delete',
     icon: '🗑️',
-    shortcut: '4',
+    shortcut: '5',
   },
 ];
 
