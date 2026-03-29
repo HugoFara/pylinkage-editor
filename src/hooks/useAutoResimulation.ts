@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import { useMechanismStore } from '../stores/mechanismStore';
 import { useEditorStore } from '../stores/editorStore';
 import { simulationApi } from '../api/client';
+import { simulateLocal } from '../solver/kinematic';
 
 const DEBOUNCE_MS = 500;
 
@@ -40,6 +41,14 @@ export function useAutoResimulation() {
     if (timerRef.current) clearTimeout(timerRef.current);
 
     timerRef.current = setTimeout(async () => {
+      // Try client-side first
+      const localResult = simulateLocal(mechanism);
+      if (localResult && localResult.frames.length > 0) {
+        setLoci(localResult.frames, localResult.jointNames);
+        return;
+      }
+
+      // Fall back to backend
       try {
         const result = await simulationApi.simulateDirect(mechanism);
         if (result.frames && result.frames.length > 0) {

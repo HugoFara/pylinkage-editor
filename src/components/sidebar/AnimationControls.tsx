@@ -9,6 +9,7 @@ import { useMechanismStore } from '../../stores/mechanismStore';
 import { simulationApi } from '../../api/client';
 import { useSimulationStream } from '../../hooks/useSimulationStream';
 import type { SimulationFrame } from '../../types/mechanism';
+import { simulateLocal } from '../../solver/kinematic';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -118,12 +119,25 @@ export function AnimationControls() {
     onComplete: handleStreamComplete,
   });
 
-  // REST API simulation mutation
+  // REST API simulation mutation (with client-side fallback)
   const simulateMutation = useMutation({
     mutationFn: async () => {
       if (!mechanism) throw new Error('No mechanism loaded');
 
-      // Use direct simulation for local mechanisms (not saved to backend)
+      // Try client-side solving first (handles four-bars, slider-cranks)
+      const localResult = simulateLocal(mechanism);
+      if (localResult && localResult.frames.length > 0) {
+        return {
+          mechanism_id: mechanism.id,
+          iterations: localResult.frames.length,
+          frames: localResult.frames,
+          joint_names: localResult.jointNames,
+          is_complete: true,
+          error: null,
+        };
+      }
+
+      // Fall back to backend for complex topologies (triads, etc.)
       if (mechanism.id.startsWith('local-')) {
         return simulationApi.simulateDirect({
           name: mechanism.name,
