@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import type { SimulationFrame, SynthesisMode, SynthesisResponse } from '../types/mechanism';
+import type { SimulationFrame, SynthesisMode, SynthesisResponse, TopologySynthesisResponse } from '../types/mechanism';
 
 interface SynthesisState {
   // Current synthesis mode
@@ -34,10 +34,14 @@ interface SynthesisState {
   setRequireGrashof: (v: boolean) => void;
   maxSolutions: number;
   setMaxSolutions: (n: number) => void;
+  maxLinks: number;
+  setMaxLinks: (n: number) => void;
 
   // Results
   results: SynthesisResponse | null;
   setResults: (results: SynthesisResponse | null) => void;
+  topologyResults: TopologySynthesisResponse | null;
+  setTopologyResults: (results: TopologySynthesisResponse | null) => void;
   selectedSolutionIndex: number | null;
   selectSolution: (index: number | null) => void;
   hoveredSolutionIndex: number | null;
@@ -59,7 +63,7 @@ interface SynthesisState {
 
 export const useSynthesisStore = create<SynthesisState>((set) => ({
   mode: 'path',
-  setMode: (mode) => set({ mode, results: null, selectedSolutionIndex: null }),
+  setMode: (mode) => set({ mode, results: null, topologyResults: null, selectedSolutionIndex: null, hoveredSolutionIndex: null, previewFrames: null, previewJointNames: null, previewFrame: 0 }),
 
   // Path
   precisionPoints: [],
@@ -93,10 +97,14 @@ export const useSynthesisStore = create<SynthesisState>((set) => ({
   setRequireGrashof: (requireGrashof) => set({ requireGrashof }),
   maxSolutions: 10,
   setMaxSolutions: (maxSolutions) => set({ maxSolutions }),
+  maxLinks: 6,
+  setMaxLinks: (maxLinks) => set({ maxLinks }),
 
   // Results
   results: null,
   setResults: (results) => set({ results, selectedSolutionIndex: null, hoveredSolutionIndex: null, previewFrames: null, previewJointNames: null, previewFrame: 0 }),
+  topologyResults: null,
+  setTopologyResults: (topologyResults) => set({ topologyResults, selectedSolutionIndex: null, hoveredSolutionIndex: null, previewFrames: null, previewJointNames: null, previewFrame: 0 }),
   selectedSolutionIndex: null,
   selectSolution: (selectedSolutionIndex) => set({ selectedSolutionIndex }),
   hoveredSolutionIndex: null,
@@ -119,10 +127,13 @@ export const useSynthesisStore = create<SynthesisState>((set) => ({
       anglePairs: [],
       poses: [],
       results: null,
+      topologyResults: null,
       selectedSolutionIndex: null,
+      hoveredSolutionIndex: null,
       isRunning: false,
       previewFrames: null,
       previewJointNames: null,
       previewFrame: 0,
+      maxLinks: 6,
     }),
 }));

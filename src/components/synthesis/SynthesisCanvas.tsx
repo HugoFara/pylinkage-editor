@@ -62,6 +62,7 @@ export function SynthesisCanvas() {
   const poses = useSynthesisStore((s) => s.poses);
   const addPose = useSynthesisStore((s) => s.addPose);
   const results = useSynthesisStore((s) => s.results);
+  const topologyResults = useSynthesisStore((s) => s.topologyResults);
   const selectedSolutionIndex = useSynthesisStore((s) => s.selectedSolutionIndex);
   const hoveredSolutionIndex = useSynthesisStore((s) => s.hoveredSolutionIndex);
   const previewFrames = useSynthesisStore((s) => s.previewFrames);
@@ -74,9 +75,27 @@ export function SynthesisCanvas() {
   // Which solution to preview: selected takes priority over hovered
   const previewIndex = selectedSolutionIndex ?? hoveredSolutionIndex;
 
+  // Helper to get the mechanism dict for the current preview index
+  const getMechDict = useCallback(
+    (index: number) => {
+      if (mode === 'topology' && topologyResults) {
+        return topologyResults.solutions[index]?.mechanism_dict ?? null;
+      }
+      return results?.mechanism_dicts[index] ?? null;
+    },
+    [mode, topologyResults, results]
+  );
+
   // --- Fetch simulation when preview target changes ---
   useEffect(() => {
-    if (previewIndex === null || !results || !results.mechanism_dicts[previewIndex]) {
+    if (previewIndex === null) {
+      clearPreview();
+      simulatedForIndex.current = null;
+      return;
+    }
+
+    const mechDict = getMechDict(previewIndex);
+    if (!mechDict) {
       clearPreview();
       simulatedForIndex.current = null;
       return;
@@ -86,7 +105,6 @@ export function SynthesisCanvas() {
     if (simulatedForIndex.current === previewIndex) return;
 
     let cancelled = false;
-    const mechDict = results.mechanism_dicts[previewIndex];
 
     simulationApi.simulateDirect(mechDict).then((simResult) => {
       if (cancelled) return;
@@ -103,7 +121,7 @@ export function SynthesisCanvas() {
     });
 
     return () => { cancelled = true; };
-  }, [previewIndex, results, setPreview, clearPreview]);
+  }, [previewIndex, getMechDict, setPreview, clearPreview]);
 
   // --- Animation loop ---
   useEffect(() => {
@@ -141,7 +159,7 @@ export function SynthesisCanvas() {
   // --- Clear simulation cache when results change ---
   useEffect(() => {
     simulatedForIndex.current = null;
-  }, [results]);
+  }, [results, topologyResults]);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -181,7 +199,7 @@ export function SynthesisCanvas() {
     if (!pos) return;
     const canvasPos = screenToCanvas(pos.x, pos.y);
 
-    if (mode === 'path') {
+    if (mode === 'path' || mode === 'topology') {
       addPoint(canvasPos);
     } else if (mode === 'motion') {
       addPose({ ...canvasPos, angle: 0 });
@@ -300,9 +318,9 @@ export function SynthesisCanvas() {
   const opacity = isHoverPreview ? 0.6 : 1.0;
 
   const renderAnimatedPreview = () => {
-    if (previewIndex === null || !results) return null;
+    if (previewIndex === null) return null;
 
-    const mechDict = results.mechanism_dicts[previewIndex];
+    const mechDict = getMechDict(previewIndex);
     if (!mechDict) return null;
 
     // Build a joint ID → position map from animation frames
@@ -383,29 +401,46 @@ export function SynthesisCanvas() {
       );
     }
 
-    // Render coupler point trajectory (loci) if we have animation frames
+    // Render joint trajectories (loci) if we have animation frames
     if (previewFrames && previewJointNames && previewFrames.length > 2) {
-      // Find the coupler point joint (named "P" or last tracker joint)
-      const trackerJoints = mechDict.joints.filter((j) => j.type === 'tracker');
-      const couplerJointId = trackerJoints.length > 0 ? trackerJoints[0].id : null;
+      // Identify ground and driver joint IDs (their paths are trivial)
+      const staticJointIds = new Set<string>();
+      for (const link of mechDict.links) {
+        if (link.type === 'ground') {
+          for (const jid of link.joints) staticJointIds.add(jid);
+        }
+      }
 
-      if (couplerJointId) {
-        const lociIdx = previewJointNames.indexOf(couplerJointId);
-        if (lociIdx !== -1) {
-          const lociPoints: number[] = [];
-          for (const frame of previewFrames) {
-            const pos = frame.positions[lociIdx];
-            if (pos) {
-              const s = canvasToScreen(pos.x, pos.y);
-              lociPoints.push(s.x, s.y);
-            }
-          }
-          if (lociPoints.length >= 4) {
-            elements.push(
-              <Line key="coupler-loci" points={lociPoints} stroke={COLORS.loci} strokeWidth={1.5} dash={[4, 3]} opacity={opacity * 0.7} />
-            );
+      // Draw trajectory for every moving joint
+      for (const joint of mechDict.joints) {
+        if (staticJointIds.has(joint.id)) continue;
+
+        const lociIdx = previewJointNames.indexOf(joint.id);
+        if (lociIdx === -1) continue;
+
+        const lociPoints: number[] = [];
+        for (const frame of previewFrames) {
+          const pos = frame.positions[lociIdx];
+          if (pos) {
+            const s = canvasToScreen(pos.x, pos.y);
+            lociPoints.push(s.x, s.y);
           }
         }
+        if (lociPoints.length < 4) continue;
+
+        // Tracker joints (coupler points) get a prominent solid line;
+        // other driven joints get a subtle dashed line.
+        const isTracker = joint.type === 'tracker';
+        elements.push(
+          <Line
+            key={`loci-${joint.id}`}
+            points={lociPoints}
+            stroke={isTracker ? COLORS.loci : COLORS.link}
+            strokeWidth={isTracker ? 2.5 : 1}
+            dash={isTracker ? undefined : [4, 3]}
+            opacity={isTracker ? opacity * 0.9 : opacity * 0.35}
+          />
+        );
       }
     }
 
@@ -414,7 +449,7 @@ export function SynthesisCanvas() {
 
   // Instruction text
   const instruction =
-    mode === 'path'
+    mode === 'path' || mode === 'topology'
       ? 'Click to place precision points · Scroll to zoom · Middle-click to pan'
       : mode === 'motion'
         ? 'Click to place poses · Scroll to zoom · Middle-click to pan'
@@ -431,12 +466,12 @@ export function SynthesisCanvas() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onContextMenu={(e) => e.evt.preventDefault()}
-        style={{ cursor: isPanning ? 'grabbing' : mode === 'function' ? 'default' : 'crosshair' }}
+        style={{ cursor: isPanning ? 'grabbing' : (mode === 'function' ? 'default' : 'crosshair') }}
       >
         <Layer>
           {gridLines}
           {renderAnimatedPreview()}
-          {mode === 'path' && pointElements}
+          {(mode === 'path' || mode === 'topology') && pointElements}
           {mode === 'motion' && poseElements}
         </Layer>
       </Stage>

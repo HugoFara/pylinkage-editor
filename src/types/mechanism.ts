@@ -174,7 +174,7 @@ export const JOINT_STYLES = {
 };
 
 // Synthesis types
-export type SynthesisMode = 'path' | 'function' | 'motion';
+export type SynthesisMode = 'path' | 'function' | 'motion' | 'topology';
 
 export interface FourBarSolutionDTO {
   ground_pivot_a: number[];
@@ -192,6 +192,32 @@ export interface FourBarSolutionDTO {
 export interface SynthesisResponse {
   solutions: FourBarSolutionDTO[];
   mechanism_dicts: MechanismDict[];
+  warnings: string[];
+  solution_count: number;
+}
+
+// Topology-aware synthesis types
+export interface QualityMetricsDTO {
+  path_accuracy: number;
+  min_transmission_angle: number;
+  link_ratio: number;
+  compactness: number;
+  num_links: number;
+  is_grashof: boolean;
+  overall_score: number;
+}
+
+export interface TopologySolutionDTO {
+  topology_id: string;
+  topology_name: string;
+  family: string;
+  num_links: number;
+  metrics: QualityMetricsDTO;
+  mechanism_dict: MechanismDict;
+}
+
+export interface TopologySynthesisResponse {
+  solutions: TopologySolutionDTO[];
   warnings: string[];
   solution_count: number;
 }

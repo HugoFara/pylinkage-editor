@@ -10,6 +10,7 @@ import type {
   MechanismResponse,
   SimulationResponse,
   SynthesisResponse,
+  TopologySynthesisResponse,
   TrajectoryResponse,
 } from '../types/mechanism';
 import type {
@@ -152,6 +153,25 @@ export const synthesisApi = {
         ...options,
       }),
     }),
+
+  topologyGeneration: (
+    precisionPoints: { x: number; y: number }[],
+    options?: {
+      max_links?: number;
+      max_solutions?: number;
+      max_solutions_per_topology?: number;
+    }
+  ) =>
+    fetchJson<TopologySynthesisResponse>(
+      `${API_BASE}/synthesis/topology-generation`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          precision_points: precisionPoints,
+          ...options,
+        }),
+      }
+    ),
 };
 
 // Optimization

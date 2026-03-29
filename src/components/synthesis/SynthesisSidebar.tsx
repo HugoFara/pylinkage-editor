@@ -7,7 +7,7 @@ import { useSynthesisStore } from '../../stores/synthesisStore';
 import { useMechanismStore, resetCounters } from '../../stores/mechanismStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { synthesisApi, mechanismApi, simulationApi } from '../../api/client';
-import type { SynthesisMode } from '../../types/mechanism';
+import type { MechanismDict, SynthesisMode } from '../../types/mechanism';
 
 const MODES: { id: SynthesisMode; label: string; description: string }[] = [
   {
@@ -17,13 +17,18 @@ const MODES: { id: SynthesisMode; label: string; description: string }[] = [
   },
   {
     id: 'function',
-    label: 'Function',
+    label: 'Func',
     description: 'Define input/output angle pairs (in degrees).',
   },
   {
     id: 'motion',
     label: 'Motion',
     description: 'Click on the canvas to place poses (position + orientation).',
+  },
+  {
+    id: 'topology',
+    label: 'Topo',
+    description: 'Search across 4-bar, 6-bar, and 8-bar topologies for the best coupler path.',
   },
 ];
 
@@ -300,8 +305,12 @@ export function SynthesisSidebar() {
   const setRequireGrashof = useSynthesisStore((s) => s.setRequireGrashof);
   const maxSolutions = useSynthesisStore((s) => s.maxSolutions);
   const setMaxSolutions = useSynthesisStore((s) => s.setMaxSolutions);
+  const maxLinks = useSynthesisStore((s) => s.maxLinks);
+  const setMaxLinks = useSynthesisStore((s) => s.setMaxLinks);
   const results = useSynthesisStore((s) => s.results);
   const setResults = useSynthesisStore((s) => s.setResults);
+  const topologyResults = useSynthesisStore((s) => s.topologyResults);
+  const setTopologyResults = useSynthesisStore((s) => s.setTopologyResults);
   const selectedSolutionIndex = useSynthesisStore(
     (s) => s.selectedSolutionIndex
   );
@@ -323,49 +332,75 @@ export function SynthesisSidebar() {
     !isRunning &&
     ((mode === 'path' && precisionPoints.length >= 3) ||
       (mode === 'function' && anglePairs.length >= 3) ||
-      (mode === 'motion' && poses.length >= 3));
+      (mode === 'motion' && poses.length >= 3) ||
+      (mode === 'topology' && precisionPoints.length >= 3));
 
   const handleRun = async () => {
     setIsRunning(true);
     setResults(null);
+    setTopologyResults(null);
     try {
-      const options = {
-        max_solutions: maxSolutions,
-        require_grashof: requireGrashof,
-      };
-      let response;
-      if (mode === 'path') {
-        response = await synthesisApi.pathGeneration(precisionPoints, options);
-      } else if (mode === 'function') {
-        response = await synthesisApi.functionGeneration(anglePairs, {
-          ...options,
-          ground_length: 100,
+      if (mode === 'topology') {
+        const response = await synthesisApi.topologyGeneration(
+          precisionPoints,
+          {
+            max_links: maxLinks,
+            max_solutions: maxSolutions,
+          }
+        );
+        setTopologyResults(response);
+      } else {
+        const options = {
+          max_solutions: maxSolutions,
+          require_grashof: requireGrashof,
+        };
+        let response;
+        if (mode === 'path') {
+          response = await synthesisApi.pathGeneration(
+            precisionPoints,
+            options
+          );
+        } else if (mode === 'function') {
+          response = await synthesisApi.functionGeneration(anglePairs, {
+            ...options,
+            ground_length: 100,
+          });
+        } else {
+          response = await synthesisApi.motionGeneration(poses, options);
+        }
+        setResults(response);
+      }
+    } catch (e) {
+      const errorMsg = (e as Error).message;
+      if (mode === 'topology') {
+        setTopologyResults({
+          solutions: [],
+          warnings: [errorMsg],
+          solution_count: 0,
         });
       } else {
-        response = await synthesisApi.motionGeneration(poses, options);
+        setResults({
+          solutions: [],
+          mechanism_dicts: [],
+          warnings: [errorMsg],
+          solution_count: 0,
+        });
       }
-      setResults(response);
-    } catch (e) {
-      setResults({
-        solutions: [],
-        mechanism_dicts: [],
-        warnings: [(e as Error).message],
-        solution_count: 0,
-      });
     } finally {
       setIsRunning(false);
     }
   };
 
   const handleSendToDesign = async () => {
-    if (
-      selectedSolutionIndex === null ||
-      !results ||
-      !results.mechanism_dicts[selectedSolutionIndex]
-    )
-      return;
+    if (selectedSolutionIndex === null) return;
 
-    const mechDict = results.mechanism_dicts[selectedSolutionIndex];
+    let mechDict: MechanismDict | undefined;
+    if (mode === 'topology' && topologyResults) {
+      mechDict = topologyResults.solutions[selectedSolutionIndex]?.mechanism_dict;
+    } else if (results) {
+      mechDict = results.mechanism_dicts[selectedSolutionIndex];
+    }
+    if (!mechDict) return;
     try {
       const mechanism = await mechanismApi.create(mechDict);
       resetCounters();
@@ -414,14 +449,14 @@ export function SynthesisSidebar() {
       {/* Inputs */}
       <div style={styles.section}>
         <div style={styles.sectionTitle}>
-          {mode === 'path'
+          {mode === 'path' || mode === 'topology'
             ? `Precision Points (${precisionPoints.length})`
             : mode === 'function'
               ? `Angle Pairs (${anglePairs.length})`
               : `Poses (${poses.length})`}
         </div>
 
-        {mode === 'path' && (
+        {(mode === 'path' || mode === 'topology') && (
           <div style={styles.pointList}>
             {precisionPoints.map((p, i) => (
               <div key={i} style={styles.pointItem}>
@@ -485,14 +520,36 @@ export function SynthesisSidebar() {
       {/* Options */}
       <div style={styles.section}>
         <div style={styles.sectionTitle}>Options</div>
-        <label style={styles.checkbox}>
-          <input
-            type="checkbox"
-            checked={requireGrashof}
-            onChange={(e) => setRequireGrashof(e.target.checked)}
-          />
-          Require Grashof (full rotation)
-        </label>
+        {mode !== 'topology' && (
+          <label style={styles.checkbox}>
+            <input
+              type="checkbox"
+              checked={requireGrashof}
+              onChange={(e) => setRequireGrashof(e.target.checked)}
+            />
+            Require Grashof (full rotation)
+          </label>
+        )}
+        {mode === 'topology' && (
+          <div style={{ ...styles.inputRow, marginTop: '4px' }}>
+            <span style={{ fontSize: '12px', color: '#e6edf3' }}>
+              Max links:
+            </span>
+            <select
+              style={{
+                ...styles.input,
+                width: '90px',
+                cursor: 'pointer',
+              }}
+              value={maxLinks}
+              onChange={(e) => setMaxLinks(parseInt(e.target.value))}
+            >
+              <option value={4}>4 (four-bar)</option>
+              <option value={6}>6 (six-bar)</option>
+              <option value={8}>8 (eight-bar)</option>
+            </select>
+          </div>
+        )}
         <div style={{ ...styles.inputRow, marginTop: '8px' }}>
           <span style={{ fontSize: '12px', color: '#e6edf3' }}>
             Max solutions:
@@ -520,8 +577,8 @@ export function SynthesisSidebar() {
         {isRunning ? 'Running...' : 'Generate Linkages'}
       </button>
 
-      {/* Results */}
-      {results && (
+      {/* Results — four-bar modes */}
+      {mode !== 'topology' && results && (
         <div>
           <div style={styles.sectionTitle}>
             Results ({results.solution_count} solutions)
@@ -564,6 +621,79 @@ export function SynthesisSidebar() {
                       {sol.grashof_type === 'NON_GRASHOF' && ' — limited rotation'}
                     </span>
                   )}
+                </div>
+              );
+            })}
+          </div>
+
+          {selectedSolutionIndex !== null && (
+            <button
+              style={{ ...styles.sendButton, marginTop: '8px' }}
+              onClick={handleSendToDesign}
+            >
+              Send to Design Tab
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Results — topology mode */}
+      {mode === 'topology' && topologyResults && (
+        <div>
+          <div style={styles.sectionTitle}>
+            Results ({topologyResults.solution_count} solutions)
+          </div>
+
+          {topologyResults.warnings.map((w, i) => (
+            <p key={i} style={styles.warning}>
+              {w}
+            </p>
+          ))}
+
+          <div style={{ ...styles.pointList, marginTop: '8px' }}>
+            {topologyResults.solutions.map((sol, i) => {
+              const isSelected = selectedSolutionIndex === i;
+              const isHovered = hoveredSolutionIndex === i;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    ...styles.resultItem,
+                    ...(isSelected ? styles.resultItemSelected : {}),
+                    ...(isHovered && !isSelected
+                      ? styles.resultItemHovered
+                      : {}),
+                  }}
+                  onClick={() => selectSolution(i)}
+                  onMouseEnter={() => setHoveredSolution(i)}
+                  onMouseLeave={() => setHoveredSolution(null)}
+                >
+                  <div>
+                    <span style={styles.pointIndex}>#{i + 1}</span>
+                    <span style={{ fontWeight: 500 }}>{sol.topology_name}</span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        color: '#8b949e',
+                        marginLeft: '6px',
+                      }}
+                    >
+                      {sol.family}, {sol.num_links} links
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      color: '#8b949e',
+                      marginTop: '2px',
+                    }}
+                  >
+                    score={sol.metrics.overall_score.toFixed(3)}
+                    {' · '}TA={sol.metrics.min_transmission_angle.toFixed(1)}°
+                    {sol.metrics.is_grashof && (
+                      <span style={{ color: '#3fb950' }}> · Grashof</span>
+                    )}
+                  </div>
                 </div>
               );
             })}
