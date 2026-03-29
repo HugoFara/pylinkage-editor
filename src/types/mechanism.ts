@@ -107,6 +107,7 @@ export type AppTab = 'design' | 'synthesis' | 'optimize';
 export type EditorMode =
   | 'select'
   | 'draw-link'
+  | 'add-dyad'
   | 'move-joint'
   | 'interact'
   | 'delete'

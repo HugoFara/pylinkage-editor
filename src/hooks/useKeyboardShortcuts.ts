@@ -26,6 +26,7 @@ const MODE_SHORTCUTS: Record<string, EditorMode> = {
   '3': 'move-joint',
   '4': 'interact',
   '5': 'delete',
+  '6': 'add-dyad',
 };
 
 export function useKeyboardShortcuts() {
@@ -34,10 +35,13 @@ export function useKeyboardShortcuts() {
   const setAnimating = useEditorStore((s) => s.setAnimating);
   const selectedLinkId = useEditorStore((s) => s.selectedLinkId);
   const selectLink = useEditorStore((s) => s.selectLink);
+  const selectedJointId = useEditorStore((s) => s.selectedJointId);
+  const selectJoint = useEditorStore((s) => s.selectJoint);
   const resetView = useEditorStore((s) => s.resetView);
 
   const loci = useMechanismStore((s) => s.loci);
   const deleteLink = useMechanismStore((s) => s.deleteLink);
+  const deleteJoint = useMechanismStore((s) => s.deleteJoint);
 
   // Access temporal store for undo/redo via the store's temporal property
   const temporalStore = useMechanismStore.temporal;
@@ -74,12 +78,20 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Delete/Backspace: Delete selected link
-      if ((key === 'Delete' || key === 'Backspace') && selectedLinkId) {
-        event.preventDefault();
-        deleteLink(selectedLinkId);
-        selectLink(null);
-        return;
+      // Delete/Backspace: Delete selected link or joint
+      if (key === 'Delete' || key === 'Backspace') {
+        if (selectedJointId) {
+          event.preventDefault();
+          deleteJoint(selectedJointId);
+          selectJoint(null);
+          return;
+        }
+        if (selectedLinkId) {
+          event.preventDefault();
+          deleteLink(selectedLinkId);
+          selectLink(null);
+          return;
+        }
       }
 
       // Ctrl+0: Reset view
@@ -118,6 +130,9 @@ export function useKeyboardShortcuts() {
       selectedLinkId,
       deleteLink,
       selectLink,
+      selectedJointId,
+      deleteJoint,
+      selectJoint,
       undo,
       redo,
       resetView,

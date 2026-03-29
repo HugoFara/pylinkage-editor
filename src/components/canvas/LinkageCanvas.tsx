@@ -171,9 +171,9 @@ export function LinkageCanvas() {
     [loci, lociJointNames, screenToCanvas, canvasToScreen, setAnimationFrame, setAnimating]
   );
 
-  // Handle mouse down for draw-link mode
+  // Handle mouse down for draw-link and add-dyad modes
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (mode !== 'draw-link') return;
+    if (mode !== 'draw-link' && mode !== 'add-dyad') return;
 
     const stage = e.target.getStage();
     if (!stage) return;
@@ -185,6 +185,9 @@ export function LinkageCanvas() {
 
     // Check for snap to existing joint
     const snappedJoint = findJointAtPosition(canvasPos.x, canvasPos.y);
+
+    // add-dyad mode requires snapping to an existing joint
+    if (mode === 'add-dyad' && !snappedJoint) return;
 
     setDrawState({
       isDrawing: true,
@@ -210,7 +213,7 @@ export function LinkageCanvas() {
 
     const canvasPos = screenToCanvas(pos.x, pos.y);
 
-    if (mode === 'draw-link' && drawState.isDrawing) {
+    if ((mode === 'draw-link' || mode === 'add-dyad') && drawState.isDrawing) {
       // Check for snap to existing joint at end point
       const snappedJoint = findJointAtPosition(canvasPos.x, canvasPos.y);
 
@@ -226,8 +229,22 @@ export function LinkageCanvas() {
     }
   };
 
-  // Handle mouse up for draw-link mode - creates link directly without modal
+  // addDyad from store
+  const addDyad = useMechanismStore((s) => s.addDyad);
+
+  // Handle mouse up for draw-link and add-dyad modes
   const handleMouseUp = () => {
+    if (mode === 'add-dyad' && drawState.isDrawing) {
+      const { snappedToJoint, snappedEndJoint } = drawState;
+
+      // Both ends must snap to existing joints
+      if (snappedToJoint && snappedEndJoint && snappedToJoint !== snappedEndJoint) {
+        addDyad(snappedToJoint, snappedEndJoint);
+      }
+      resetDrawState();
+      return;
+    }
+
     if (mode !== 'draw-link' || !drawState.isDrawing) return;
 
     const { startPoint, endPoint, snappedToJoint, snappedEndJoint } = drawState;
@@ -587,13 +604,60 @@ export function LinkageCanvas() {
 
   // Render draw preview line
   const renderDrawPreview = () => {
-    if (mode !== 'draw-link' || !drawState.isDrawing) return null;
+    if ((mode !== 'draw-link' && mode !== 'add-dyad') || !drawState.isDrawing) return null;
 
     const { startPoint, endPoint, snappedToJoint, snappedEndJoint } = drawState;
     if (!startPoint || !endPoint) return null;
 
     const startScreen = canvasToScreen(startPoint.x, startPoint.y);
     const endScreen = canvasToScreen(endPoint.x, endPoint.y);
+
+    // For add-dyad mode, show two lines through a midpoint (the coupler position)
+    if (mode === 'add-dyad') {
+      const dx = endPoint.x - startPoint.x;
+      const dy = endPoint.y - startPoint.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const offset = len > 0 ? len * 0.3 : 20;
+      const mx = (startPoint.x + endPoint.x) / 2;
+      const my = (startPoint.y + endPoint.y) / 2;
+      const cx = len > 0 ? mx - (dy / len) * offset : mx;
+      const cy = len > 0 ? my + (dx / len) * offset : my + 20;
+      const cScreen = canvasToScreen(cx, cy);
+
+      return (
+        <Group>
+          <Line
+            points={[startScreen.x, startScreen.y, cScreen.x, cScreen.y]}
+            stroke="#a371f7"
+            strokeWidth={LINK_STYLES.strokeWidth.link}
+            opacity={0.7}
+            dash={[8, 4]}
+          />
+          <Line
+            points={[cScreen.x, cScreen.y, endScreen.x, endScreen.y]}
+            stroke="#a371f7"
+            strokeWidth={LINK_STYLES.strokeWidth.link}
+            opacity={0.7}
+            dash={[8, 4]}
+          />
+          {/* Coupler joint preview */}
+          <Circle
+            x={cScreen.x}
+            y={cScreen.y}
+            radius={JOINT_STYLES.radius}
+            fill="#a371f7"
+            opacity={0.7}
+          />
+          {/* Snap indicators */}
+          {snappedToJoint && (
+            <Circle x={startScreen.x} y={startScreen.y} radius={JOINT_STYLES.hoverRadius} stroke="#a371f7" strokeWidth={2} fill="transparent" />
+          )}
+          {snappedEndJoint && (
+            <Circle x={endScreen.x} y={endScreen.y} radius={JOINT_STYLES.hoverRadius} stroke="#a371f7" strokeWidth={2} fill="transparent" />
+          )}
+        </Group>
+      );
+    }
 
     return (
       <Group>

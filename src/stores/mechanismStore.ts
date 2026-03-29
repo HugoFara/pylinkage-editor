@@ -32,6 +32,9 @@ interface MechanismState {
   updateLink: (id: string, updates: Partial<LinkDict>) => void;
   deleteLink: (id: string) => void;
 
+  // Structural operations
+  addDyad: (jointAId: string, jointBId: string, couplerPosition?: [number, number]) => void;
+
   // Joint operations (secondary)
   addJoint: (joint: JointDict) => void;
   updateJoint: (id: string, updates: Partial<JointDict>) => void;
@@ -92,6 +95,63 @@ export const useMechanismStore = create<MechanismState>()(
             links: [...baseMechanism.links, link],
           },
           loci: null, // Invalidate cache
+        });
+      },
+
+      addDyad: (jointAId, jointBId, couplerPosition) => {
+        const { mechanism } = get();
+        if (!mechanism) return;
+
+        const jointA = mechanism.joints.find((j) => j.id === jointAId);
+        const jointB = mechanism.joints.find((j) => j.id === jointBId);
+        if (!jointA || !jointB) return;
+
+        const ax = jointA.position[0] ?? 0;
+        const ay = jointA.position[1] ?? 0;
+        const bx = jointB.position[0] ?? 0;
+        const by = jointB.position[1] ?? 0;
+
+        // Default coupler position: midpoint with perpendicular offset
+        let cx: number, cy: number;
+        if (couplerPosition) {
+          [cx, cy] = couplerPosition;
+        } else {
+          const mx = (ax + bx) / 2;
+          const my = (ay + by) / 2;
+          const dx = bx - ax;
+          const dy = by - ay;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          const offset = len * 0.3;
+          // Perpendicular direction (rotate 90 degrees)
+          cx = mx - (dy / len) * offset;
+          cy = my + (dx / len) * offset;
+        }
+
+        const newJoint: JointDict = {
+          id: generateJointId('revolute'),
+          type: 'revolute',
+          position: [cx, cy],
+        };
+
+        const linkAC: LinkDict = {
+          id: generateLinkId('link'),
+          type: 'link',
+          joints: [jointAId, newJoint.id],
+        };
+
+        const linkCB: LinkDict = {
+          id: generateLinkId('link'),
+          type: 'link',
+          joints: [newJoint.id, jointBId],
+        };
+
+        set({
+          mechanism: {
+            ...mechanism,
+            joints: [...mechanism.joints, newJoint],
+            links: [...mechanism.links, linkAC, linkCB],
+          },
+          loci: null,
         });
       },
 

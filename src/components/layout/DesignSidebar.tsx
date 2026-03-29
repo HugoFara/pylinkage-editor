@@ -9,6 +9,7 @@ import { LinkList } from '../sidebar/LinkList';
 import { CanvasToolbar } from '../canvas/CanvasToolbar';
 import { AnimationControls } from '../sidebar/AnimationControls';
 import { ExportPanel } from '../sidebar/ExportPanel';
+import { PropertiesPanel } from '../sidebar/PropertiesPanel';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -70,6 +71,12 @@ export function DesignSidebar() {
       <div style={styles.section}>
         <div style={styles.sectionTitle}>Tools</div>
         <CanvasToolbar />
+      </div>
+
+      {/* Properties */}
+      <div style={styles.section}>
+        <div style={styles.sectionTitle}>Properties</div>
+        <PropertiesPanel />
       </div>
 
       {/* Animation */}

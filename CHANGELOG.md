@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Joint trajectory preview:** Synthesis canvas now draws trajectories for
   all moving joints during solution preview, not just tracker points. Coupler
   paths are prominent; other joints show subtle traces for context.
+- **Interactive topology editing:** Add/remove dyads interactively in the
+  design tab. New "Dyad" tool (shortcut 6) creates a coupler joint + two
+  links between any two existing joints. Properties panel in the sidebar
+  allows changing joint types (revolute/prismatic/tracker) and link types
+  (ground/driver/link) without switching modes. Delete key works on
+  selected joints (removes joint + all connected links). Auto-resimulation
+  re-runs the simulation after structural edits when loci were loaded.
 
 ## [0.1.0] - 2026-03-29
 

@@ -29,6 +29,12 @@ const primaryTools: ToolButton[] = [
     icon: '🔗',
     shortcut: '1',
   },
+  {
+    mode: 'add-dyad',
+    label: 'Dyad',
+    icon: '🔺',
+    shortcut: '6',
+  },
 ];
 
 // Joint tools - collapsible (ground is a link type, not joint)
