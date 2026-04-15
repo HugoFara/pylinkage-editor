@@ -106,6 +106,13 @@ export const useMechanismStore = create<MechanismState>()(
         const jointB = mechanism.joints.find((j) => j.id === jointBId);
         if (!jointA || !jointB) return;
 
+        // Dyad endpoints must constrain motion; promote trackers to revolute.
+        const promotedJoints = mechanism.joints.map((j) =>
+          (j.id === jointAId || j.id === jointBId) && j.type === 'tracker'
+            ? { ...j, type: 'revolute' as JointType }
+            : j
+        );
+
         const ax = jointA.position[0] ?? 0;
         const ay = jointA.position[1] ?? 0;
         const bx = jointB.position[0] ?? 0;
@@ -148,7 +155,7 @@ export const useMechanismStore = create<MechanismState>()(
         set({
           mechanism: {
             ...mechanism,
-            joints: [...mechanism.joints, newJoint],
+            joints: [...promotedJoints, newJoint],
             links: [...mechanism.links, linkAC, linkCB],
           },
           loci: null,
