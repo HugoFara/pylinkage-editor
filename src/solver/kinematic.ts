@@ -210,46 +210,72 @@ export function simulateLocal(
   // Compute solve order: iteratively find joints that can be solved
   const driverOutputIds = new Set(drivers.map((d) => d.outputId));
   const solveOrder: string[] = [];
-  const solved = new Set<string>([...groundJointIds, ...driverOutputIds]);
+
+  // Trackers without ref joints have no motion constraint -> treat as static
+  // anchors fixed at their initial position. Includes default driver-leader
+  // joints and dyad endpoints created without an explicit ground link.
+  const staticAnchorIds = new Set<string>();
+  for (const j of joints) {
+    if (j.type === 'tracker' && (!j.ref_joint1_id || !j.ref_joint2_id)) {
+      staticAnchorIds.add(j.id);
+    }
+  }
+
+  const solved = new Set<string>([
+    ...groundJointIds,
+    ...driverOutputIds,
+    ...staticAnchorIds,
+  ]);
 
   const remaining = joints
     .filter((j) => !solved.has(j.id))
     .filter((j) => j.type !== 'tracker')
     .map((j) => j.id);
 
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let i = remaining.length - 1; i >= 0; i--) {
-      const jid = remaining[i];
-      const j = jointMap.get(jid)!;
+  const tryResolve = () => {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        const jid = remaining[i];
+        const j = jointMap.get(jid)!;
 
-      // Find solved anchors connected via links
-      const anchors: { id: string; dist: number }[] = [];
-      for (const link of links) {
-        if (!link.joints.includes(jid)) continue;
-        for (const otherId of link.joints) {
-          if (otherId === jid || !solved.has(otherId)) continue;
-          const d = getLinkDistance(jid, otherId);
-          if (d !== null) anchors.push({ id: otherId, dist: d });
+        // Find solved anchors connected via links
+        const anchors: { id: string; dist: number }[] = [];
+        for (const link of links) {
+          if (!link.joints.includes(jid)) continue;
+          for (const otherId of link.joints) {
+            if (otherId === jid || !solved.has(otherId)) continue;
+            const d = getLinkDistance(jid, otherId);
+            if (d !== null) anchors.push({ id: otherId, dist: d });
+          }
+        }
+
+        const canSolve =
+          (j.type === 'revolute' && anchors.length >= 2) ||
+          (j.type === 'prismatic' && anchors.length >= 1);
+
+        if (canSolve) {
+          solveOrder.push(jid);
+          solved.add(jid);
+          remaining.splice(i, 1);
+          changed = true;
         }
       }
-
-      const canSolve =
-        (j.type === 'revolute' && anchors.length >= 2) ||
-        (j.type === 'prismatic' && anchors.length >= 1);
-
-      if (canSolve) {
-        solveOrder.push(jid);
-        solved.add(jid);
-        remaining.splice(i, 1);
-        changed = true;
-      }
     }
-  }
+  };
 
-  // If there are unsolved non-tracker joints, we can't handle this topology
-  if (remaining.length > 0) return null;
+  tryResolve();
+
+  // Fallback: any remaining joint is under-constrained (e.g., a dyad endpoint
+  // with no other links). Pin it at its initial position so it can act as an
+  // anchor for adjacent joints, then re-run the resolver to unlock the rest.
+  while (remaining.length > 0) {
+    const jid = remaining.shift()!;
+    solved.add(jid);
+    staticAnchorIds.add(jid);
+    tryResolve();
+  }
 
   // Determine iteration count from the slowest driver
   const minOmega = Math.min(...drivers.map((d) => Math.abs(d.omega)));
@@ -276,6 +302,12 @@ export function simulateLocal(
     // Ground joints are always solved
     for (const gid of groundJointIds) {
       const s = state.get(gid)!;
+      s.solved = true;
+    }
+
+    // Static anchors (free trackers + under-constrained fallbacks) stay put
+    for (const sid of staticAnchorIds) {
+      const s = state.get(sid)!;
       s.solved = true;
     }
 
