@@ -346,12 +346,24 @@ export function LinkageCanvas() {
       const motorJointId = driverFirstJointId;
       const targetJointId = joint.id;
 
+      // Initial angle = current leader→target direction so simulation
+      // starts at the joint's existing position instead of snapping to 0.
+      const motorJoint = mechanism?.joints.find((j) => j.id === motorJointId);
+      const targetJoint = mechanism?.joints.find((j) => j.id === targetJointId);
+      const mx = motorJoint?.position[0] ?? 0;
+      const my = motorJoint?.position[1] ?? 0;
+      const tx = targetJoint?.position[0] ?? 0;
+      const ty = targetJoint?.position[1] ?? 0;
+      const initialAngle = Math.atan2(ty - my, tx - mx);
+
       const driverProps = {
         type: driverType as 'driver' | 'arc_driver',
         motor_joint: motorJointId,
         angular_velocity: 0.1,
-        initial_angle: 0,
-        ...(mode === 'place-arccrank' ? { arc_start: 0, arc_end: Math.PI } : {}),
+        initial_angle: initialAngle,
+        ...(mode === 'place-arccrank'
+          ? { arc_start: initialAngle, arc_end: initialAngle + Math.PI }
+          : {}),
       };
 
       const existingLink = mechanism?.links.find(
