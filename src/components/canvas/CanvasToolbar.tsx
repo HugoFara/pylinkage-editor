@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useEditorStore } from '../../stores/editorStore';
+import { useMechanismStore } from '../../stores/mechanismStore';
 import type { EditorMode } from '../../types/mechanism';
 
 interface ToolButton {
@@ -341,6 +342,16 @@ export function CanvasToolbar() {
   const setPanOffset = useEditorStore((s) => s.setPanOffset);
   const resetView = useEditorStore((s) => s.resetView);
 
+  const selectedLinkId = useEditorStore((s) => s.selectedLinkId);
+  const selectLink = useEditorStore((s) => s.selectLink);
+  const deleteLink = useMechanismStore((s) => s.deleteLink);
+
+  const removeSelectedEdge = () => {
+    if (!selectedLinkId) return;
+    deleteLink(selectedLinkId);
+    selectLink(null);
+  };
+
   const zoomBy = (factor: number) => {
     const newScale = Math.min(10, Math.max(0.1, scale * factor));
     // Zoom centered on viewport center: adjust panOffset proportionally
@@ -360,6 +371,20 @@ export function CanvasToolbar() {
           onClick={() => setMode(tool.mode)}
         />
       ))}
+
+      {/* Quick action: remove the selected edge (link) */}
+      <button
+        style={{
+          ...styles.button,
+          ...(!selectedLinkId ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+        }}
+        onClick={removeSelectedEdge}
+        disabled={!selectedLinkId}
+        title="Remove the currently selected edge (link)"
+      >
+        <span style={styles.icon}>✂️</span>
+        <span style={styles.labelWithShortcut}>Remove Edge</span>
+      </button>
 
       {/* Collapsible: Joint types */}
       <CollapsibleToolGroup
