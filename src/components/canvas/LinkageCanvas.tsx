@@ -863,7 +863,14 @@ export function LinkageCanvas() {
             onMouseEnter={() => setHoveredJoint(joint.id)}
             onMouseLeave={() => setHoveredJoint(null)}
             draggable={mode === 'move-joint' || canInteract}
-            onDragMove={canInteract ? (e) => handleInteractDrag(joint, e.target) : undefined}
+            onDragMove={(e) => {
+              if (mode === 'move-joint') {
+                const newPos = screenToCanvas(e.target.x(), e.target.y());
+                handleJointDrag(joint, newPos);
+              } else if (canInteract) {
+                handleInteractDrag(joint, e.target);
+              }
+            }}
             onDragEnd={(e) => {
               if (mode === 'move-joint') {
                 const newPos = screenToCanvas(e.target.x(), e.target.y());
