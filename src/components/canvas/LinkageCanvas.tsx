@@ -65,6 +65,8 @@ export function LinkageCanvas() {
   const drawState = useEditorStore((s) => s.drawState);
   const setDrawState = useEditorStore((s) => s.setDrawState);
   const resetDrawState = useEditorStore((s) => s.resetDrawState);
+  const driverFirstJointId = useEditorStore((s) => s.driverFirstJointId);
+  const setDriverFirstJoint = useEditorStore((s) => s.setDriverFirstJoint);
   const scale = useEditorStore((s) => s.scale);
   const panOffset = useEditorStore((s) => s.panOffset);
   const setScale = useEditorStore((s) => s.setScale);
@@ -80,7 +82,6 @@ export function LinkageCanvas() {
   const updateJointPosition = useMechanismStore((s) => s.updateJointPosition);
   const deleteJoint = useMechanismStore((s) => s.deleteJoint);
   const findJointAtPosition = useMechanismStore((s) => s.findJointAtPosition);
-  const getLinksForJoint = useMechanismStore((s) => s.getLinksForJoint);
 
   // Handle window resize
   useEffect(() => {
@@ -330,23 +331,44 @@ export function LinkageCanvas() {
         selectJoint(null);
       }
     } else if (mode === 'place-crank' || mode === 'place-arccrank') {
-      // Make connected link a driver with this joint as the motor (grounded pivot)
-      // Find links connected to this joint
-      const connectedLinks = getLinksForJoint(joint.id);
-
-      if (connectedLinks.length > 0) {
-        // Convert the first connected link to a driver
-        const linkToConvert = connectedLinks[0];
-        const driverType = mode === 'place-crank' ? 'driver' : 'arc_driver';
-
-        updateLink(linkToConvert.id, {
-          type: driverType,
-          motor_joint: joint.id,
-          angular_velocity: 0.1,
-          initial_angle: 0,
-          ...(mode === 'place-arccrank' ? { arc_start: 0, arc_end: Math.PI } : {}),
-        });
+      // Two-click flow: first click = leader (motor) joint, second = target joint.
+      if (!driverFirstJointId) {
+        setDriverFirstJoint(joint.id);
+        return;
       }
+      if (driverFirstJointId === joint.id) {
+        // Click same joint to cancel
+        setDriverFirstJoint(null);
+        return;
+      }
+
+      const driverType = mode === 'place-crank' ? 'driver' : 'arc_driver';
+      const motorJointId = driverFirstJointId;
+      const targetJointId = joint.id;
+
+      const driverProps = {
+        type: driverType as 'driver' | 'arc_driver',
+        motor_joint: motorJointId,
+        angular_velocity: 0.1,
+        initial_angle: 0,
+        ...(mode === 'place-arccrank' ? { arc_start: 0, arc_end: Math.PI } : {}),
+      };
+
+      const existingLink = mechanism?.links.find(
+        (l) => l.joints.includes(motorJointId) && l.joints.includes(targetJointId)
+      );
+
+      if (existingLink) {
+        updateLink(existingLink.id, driverProps);
+      } else {
+        const newLink: LinkDict = {
+          id: generateLinkId(driverType),
+          joints: [motorJointId, targetJointId],
+          ...driverProps,
+        };
+        addLink(newLink);
+      }
+      setDriverFirstJoint(null);
     } else if (mode === 'place-revolute-joint') {
       // Convert any joint to revolute
       updateJoint(joint.id, { type: 'revolute' });
@@ -779,8 +801,9 @@ export function LinkageCanvas() {
 
       const isSelected = selectedJointId === joint.id;
       const isHovered = hoveredJointId === joint.id;
+      const isDriverLeader = driverFirstJointId === joint.id;
       const color = JOINT_COLORS[joint.type];
-      const radius = isSelected
+      const radius = isSelected || isDriverLeader
         ? JOINT_STYLES.selectedRadius
         : isHovered
           ? JOINT_STYLES.hoverRadius
@@ -794,13 +817,34 @@ export function LinkageCanvas() {
 
       return (
         <Group key={joint.id}>
+          {/* Driver leader halo */}
+          {isDriverLeader && (
+            <Circle
+              x={screenPos.x}
+              y={screenPos.y}
+              radius={radius + 6}
+              stroke="#f7b955"
+              strokeWidth={2}
+              dash={[4, 3]}
+              fill="transparent"
+              listening={false}
+            />
+          )}
           {/* Joint circle */}
           <Circle
             x={screenPos.x}
             y={screenPos.y}
             radius={radius}
             fill={color}
-            stroke={isSelected ? '#ffffff' : isHovered ? '#c9d1d9' : '#0d1117'}
+            stroke={
+              isDriverLeader
+                ? '#f7b955'
+                : isSelected
+                  ? '#ffffff'
+                  : isHovered
+                    ? '#c9d1d9'
+                    : '#0d1117'
+            }
             strokeWidth={JOINT_STYLES.strokeWidth}
             onClick={() => handleJointClick(joint)}
             onTap={() => handleJointClick(joint)}
@@ -882,11 +926,42 @@ export function LinkageCanvas() {
     });
   };
 
+  const isPlacingDriver = mode === 'place-crank' || mode === 'place-arccrank';
+  const driverKindLabel = mode === 'place-arccrank' ? 'arc-crank' : 'crank';
+  const bannerText = isPlacingDriver
+    ? driverFirstJointId
+      ? `Click the target joint to drive (${driverKindLabel}). Esc to cancel.`
+      : `Click the leader joint (motor pivot) for the ${driverKindLabel}.`
+    : null;
+
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '100%', overflow: 'hidden' }}
+      style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}
     >
+      {bannerText && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '12px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+            background: 'rgba(247, 185, 85, 0.15)',
+            border: '1px solid #f7b955',
+            color: '#f7b955',
+            padding: '6px 14px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 500,
+            pointerEvents: 'none',
+            backdropFilter: 'blur(4px)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {bannerText}
+        </div>
+      )}
       <Stage
         width={dimensions.width}
         height={dimensions.height}

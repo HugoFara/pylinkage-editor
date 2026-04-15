@@ -41,6 +41,10 @@ interface EditorState {
   setDrawState: (state: Partial<DrawState>) => void;
   resetDrawState: () => void;
 
+  // Two-click driver placement: leader joint awaiting a target
+  driverFirstJointId: string | null;
+  setDriverFirstJoint: (id: string | null) => void;
+
   // Zoom and pan
   scale: number;
   panOffset: { x: number; y: number };
@@ -78,6 +82,7 @@ export const useEditorStore = create<EditorState>((set) => ({
       drawState: initialDrawState,
       selectedLinkId: null,
       selectedJointId: null,
+      driverFirstJointId: null,
     }),
 
   // Animation
@@ -107,6 +112,10 @@ export const useEditorStore = create<EditorState>((set) => ({
       drawState: { ...s.drawState, ...state },
     })),
   resetDrawState: () => set({ drawState: initialDrawState }),
+
+  // Two-click driver placement
+  driverFirstJointId: null,
+  setDriverFirstJoint: (id) => set({ driverFirstJointId: id }),
 
   // Zoom and pan
   scale: 1,
