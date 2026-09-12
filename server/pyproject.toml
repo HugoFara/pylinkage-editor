@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = [
-    "pylinkage[numba,svg]>=1.2.0",
+    "pylinkage[numba,scipy,svg]>=1.2.0",
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "pydantic-settings>=2.1.0",
