@@ -6,6 +6,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { examplesApi, simulationApi } from '../../api/client';
+import { useBackendStatus } from '../../api/backend';
+import { listBundledExamples, loadBundledExample } from '../../data/examples';
 import { useMechanismStore, resetCounters } from '../../stores/mechanismStore';
 
 const styles: Record<string, React.CSSProperties> = {
@@ -53,32 +55,42 @@ export function ExampleLoader() {
   const [selectedExample, setSelectedExample] = useState<string>('');
   const setMechanism = useMechanismStore((s) => s.setMechanism);
   const setLoci = useMechanismStore((s) => s.setLoci);
+  const backend = useBackendStatus();
 
-  // Fetch available examples
+  // Fetch available examples; without a backend, serve the bundled dump
   const {
     data: examples,
     isLoading: loadingExamples,
     error: examplesError,
   } = useQuery({
-    queryKey: ['examples'],
-    queryFn: examplesApi.list,
+    queryKey: ['examples', backend],
+    queryFn: backend === 'online' ? examplesApi.list : listBundledExamples,
+    enabled: backend !== 'checking',
   });
 
   // Load example mutation
   const loadMutation = useMutation({
-    mutationFn: examplesApi.load,
-    onSuccess: async (mechanism) => {
-      resetCounters();
-      setMechanism(mechanism);
-
+    mutationFn: async (name: string) => {
+      if (backend !== 'online') {
+        return loadBundledExample(name);
+      }
+      const mechanism = await examplesApi.load(name);
       // Also fetch simulation data
       try {
         const simResult = await simulationApi.simulate(mechanism.id);
         if (simResult.is_complete) {
-          setLoci(simResult.frames, simResult.joint_names);
+          return { mechanism, frames: simResult.frames, jointNames: simResult.joint_names };
         }
       } catch (e) {
         console.error('Failed to simulate:', e);
+      }
+      return { mechanism, frames: null, jointNames: null };
+    },
+    onSuccess: ({ mechanism, frames, jointNames }) => {
+      resetCounters();
+      setMechanism(mechanism);
+      if (frames) {
+        setLoci(frames, jointNames);
       }
     },
   });
@@ -97,7 +109,7 @@ export function ExampleLoader() {
         style={styles.select}
         value={selectedExample}
         onChange={(e) => setSelectedExample(e.target.value)}
-        disabled={loadingExamples}
+        disabled={loadingExamples || backend === 'checking'}
       >
         <option value="">Select an example...</option>
         {examples?.map((ex) => (
