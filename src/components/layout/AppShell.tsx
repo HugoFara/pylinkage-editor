@@ -5,6 +5,7 @@
 
 import { useEditorStore } from '../../stores/editorStore';
 import { TabBar } from './TabBar';
+import { BackendBanner } from './BackendBanner';
 import { DesignSidebar } from './DesignSidebar';
 import { LinkageCanvas } from '../canvas/LinkageCanvas';
 import { SynthesisSidebar } from '../synthesis/SynthesisSidebar';
@@ -64,6 +65,7 @@ export function AppShell() {
         <div style={styles.sidebarHeader}>
           <h1 style={styles.title}>Pylinkage</h1>
           <p style={styles.subtitle}>Planar linkage design tool</p>
+          <BackendBanner />
         </div>
         <TabBar />
         <div style={styles.sidebarContent}>
