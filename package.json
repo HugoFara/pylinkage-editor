@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "cd server && uv run pylinkage-editor-server",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint --max-warnings 0",

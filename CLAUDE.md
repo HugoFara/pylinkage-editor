@@ -4,20 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pylinkage Editor is a visual planar linkage design and synthesis tool. It's a React/TypeScript frontend that communicates with a Python backend (pylinkage) over `/api` for simulation and synthesis. Part of the [the-great-walker](../CLAUDE.md) monorepo.
+Pylinkage Editor is a visual planar linkage design and synthesis tool. It's a React/TypeScript frontend that communicates with a Python backend in `server/` (FastAPI over pylinkage) over `/api` for simulation and synthesis. Part of the [the-great-walker](../CLAUDE.md) monorepo.
 
 ## Commands
 
 ```bash
 npm install          # install dependencies
 npm run dev          # dev server at http://localhost:5173 (proxies /api → localhost:8000)
+npm run server       # Python backend on localhost:8000 (cd server && uv run pylinkage-editor-server)
 npm run build        # tsc + vite build
 npm run lint         # ESLint
 npm run type-check   # TypeScript checking (tsc --noEmit)
 npm run preview      # preview production build
 ```
 
-CI runs `lint`, `type-check`, and `build` on every push/PR to main.
+CI runs `lint`, `type-check`, and `build` for the frontend and `ruff` + `pytest` for `server/` on every push/PR to main.
 
 ## Architecture
 
@@ -55,7 +56,7 @@ The editor is mode-based (selected via keyboard 1-4 or toolbar). Each mode chang
 
 ### Backend API
 
-All in `src/api/client.ts`. REST endpoints:
+Server code in `server/pylinkage_editor_server/` (routers → services → pylinkage; pydantic schemas in `models/`; `uv run pytest` in `server/` runs the smoke tests). Client in `src/api/client.ts`. REST endpoints:
 - **CRUD**: `/api/mechanisms` (list, get, create, update, delete)
 - **Simulation**: `/api/mechanisms/{id}/simulate`, `/trajectory`, `/rotation-period`
 - **Examples**: `/api/examples` (list, get, load)

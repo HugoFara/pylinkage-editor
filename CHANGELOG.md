@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The Python backend now lives here, in `server/`.** It was `api/` in the
+  pylinkage repository, where it was never part of the published package and
+  had to be discovered by reading the source (pylinkage#46). It is a small
+  FastAPI application over pylinkage, started with `npm run server` (or
+  `cd server && uv run pylinkage-editor-server`), with a smoke test per route
+  family. It requires pylinkage 1.2.0 or later.
+
 - **Topology synthesis mode:** Fourth synthesis mode that searches across
   4-bar, 6-bar, and 8-bar topologies, displaying ranked results with quality
   metrics (path accuracy, transmission angle, Grashof status). Configurable
