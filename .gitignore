@@ -1,2 +1,8 @@
 node_modules/
 dist/
+
+# Python server
+server/.venv/
+__pycache__/
+*.egg-info/
+server/linkage_data/

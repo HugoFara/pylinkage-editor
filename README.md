@@ -17,18 +17,26 @@ React 18, TypeScript, Zustand, Konva (react-konva), TanStack React Query, Vite
 
 ## Getting Started
 
+The editor is a browser frontend plus a Python backend that runs
+[pylinkage](https://github.com/HugoFara/pylinkage). Both live in this
+repository. You need Node and [uv](https://docs.astral.sh/uv/).
+
 ```bash
 npm install
-npm run dev
+npm run server      # Python backend on http://localhost:8000
+npm run dev         # frontend on http://localhost:5173, in another terminal
 ```
 
-The dev server starts at `http://localhost:5173` and proxies `/api` requests to a backend at `http://localhost:8000` (the pylinkage Python server).
+The dev server proxies `/api` requests to the backend. See
+[`server/README.md`](server/README.md) for configuration, optional CAD export
+dependencies, and the route list.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start dev server |
+| `npm run dev` | Start frontend dev server |
+| `npm run server` | Start Python backend (`cd server && uv run pylinkage-editor-server`) |
 | `npm run build` | Type-check and build for production |
 | `npm run preview` | Preview production build |
 | `npm run lint` | Run ESLint |
@@ -37,6 +45,7 @@ The dev server starts at `http://localhost:5173` and proxies `/api` requests to 
 ## Project Structure
 
 ```
+server/             # Python backend (FastAPI + pylinkage), see server/README.md
 src/
 ├── api/            # Backend API client (CRUD, simulation, synthesis)
 ├── components/
@@ -53,7 +62,7 @@ src/
 
 ## Architecture
 
-The editor uses a **link-first** data model: links are primary entities and joints are derived from their connections. The frontend communicates with a Python backend (pylinkage) over `/api` for computationally intensive tasks like synthesis and simulation.
+The editor uses a **link-first** data model: links are primary entities and joints are derived from their connections. The frontend communicates with the Python backend in `server/` over `/api` for computationally intensive tasks like synthesis and simulation; the backend is a thin FastAPI layer over pylinkage.
 
 State is managed with Zustand stores split by concern:
 - **mechanismStore** -- links, joints, mechanism data, undo/redo
