@@ -7,9 +7,15 @@ import math
 import tempfile
 from typing import Any
 
-from pylinkage.mechanism import Mechanism
-from pylinkage.mechanism.joint import GroundJoint, PrismaticJoint, TrackerJoint
-from pylinkage.mechanism.link import ArcDriverLink, DriverLink, GroundLink
+from pylinkage.mechanism import (
+    ArcDriverLink,
+    DriverLink,
+    GroundJoint,
+    GroundLink,
+    Mechanism,
+    PrismaticJoint,
+    TrackerJoint,
+)
 
 
 def generate_python_code(mechanism: Mechanism) -> str:

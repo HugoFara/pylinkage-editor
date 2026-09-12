@@ -6,8 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pylinkage.exceptions import UnbuildableError
-from pylinkage.mechanism import Mechanism
-from pylinkage.mechanism.serialization import mechanism_from_dict
+from pylinkage.mechanism import Mechanism, mechanism_from_dict
 
 from ..services import mechanism_service
 from ..storage.memory import storage

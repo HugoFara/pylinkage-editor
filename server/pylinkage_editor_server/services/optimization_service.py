@@ -13,9 +13,9 @@ from typing import Any
 
 import numpy as np
 from pylinkage.exceptions import UnbuildableError
-from pylinkage.linkage.analysis import bounding_box
-from pylinkage.mechanism.serialization import mechanism_from_dict
-from pylinkage.optimization.collections import Agent, MutableAgent
+from pylinkage.linkage import bounding_box
+from pylinkage.mechanism import mechanism_from_dict
+from pylinkage.population import Member
 
 from ..models.optimization_schemas import (
     ObjectiveSpec,
@@ -136,12 +136,10 @@ def _build_eval_func(objective: ObjectiveSpec, minimize: bool) -> Any:
     return eval_func
 
 
-def _agent_to_result(
-    agent: Agent | MutableAgent, linkage: Any, warnings: list[str]
-) -> OptimizationResultDTO:
-    """Convert an Agent to a result DTO, including the updated mechanism dict."""
-    score = agent.score if agent.score is not None else 0.0
-    dims = list(np.asarray(agent.dimensions).flat) if agent.dimensions is not None else []
+def _member_to_result(member: Member, linkage: Any, warnings: list[str]) -> OptimizationResultDTO:
+    """Convert one optimizer result to a DTO, including the updated mechanism dict."""
+    score = member.score
+    dims = list(np.asarray(member.dimensions).flat)
 
     # Mechanism dict round-trip is pending the Mechanism-native
     # optimizer rewrite — leave as None for now.

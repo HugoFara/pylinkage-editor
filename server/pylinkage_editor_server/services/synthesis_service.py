@@ -9,8 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pylinkage.mechanism import fourbar
-from pylinkage.mechanism.serialization import mechanism_to_dict
+from pylinkage.mechanism import fourbar, mechanism_to_dict
 from pylinkage.synthesis import (
     FourBarSolution,
     Pose,

@@ -3,8 +3,7 @@
 import math
 
 from fastapi import APIRouter, HTTPException
-from pylinkage.mechanism import MechanismBuilder
-from pylinkage.mechanism.serialization import mechanism_to_dict
+from pylinkage.mechanism import MechanismBuilder, mechanism_to_dict
 
 from ..models.mechanism_schemas import ExampleInfo, MechanismResponse
 from ..services import mechanism_service

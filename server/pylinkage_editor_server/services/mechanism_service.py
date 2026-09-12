@@ -4,8 +4,7 @@ import logging
 from typing import Any
 
 from pylinkage.exceptions import UnbuildableError
-from pylinkage.mechanism import Mechanism
-from pylinkage.mechanism.serialization import mechanism_from_dict
+from pylinkage.mechanism import Mechanism, mechanism_from_dict
 
 logger = logging.getLogger(__name__)
 
