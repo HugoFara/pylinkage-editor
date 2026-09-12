@@ -1,9 +1,10 @@
 /**
  * Static demo hook.
  *
- * The app opens on the Synthesis tab, which needs the backend. When the probe
- * finds none (the GitHub Pages build), land on the Design tab once instead, so
- * the first thing a visitor sees works.
+ * The app opens on the Synthesis tab, which needs a backend. When the probe
+ * finds no server (the GitHub Pages build), land on the Design tab once
+ * instead: it works immediately, while the in-browser backend is still
+ * loading.
  */
 
 import { useEffect, useRef } from 'react';
@@ -16,7 +17,7 @@ export function useStaticDemo() {
   const redirected = useRef(false);
 
   useEffect(() => {
-    if (backend !== 'offline' || redirected.current) return;
+    if (backend === 'checking' || backend === 'online' || redirected.current) return;
     redirected.current = true;
     setActiveTab('design');
   }, [backend, setActiveTab]);
