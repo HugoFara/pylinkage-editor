@@ -9,6 +9,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // The Pyodide worker imports the runtime from the CDN with a dynamic import()
+  worker: {
+    format: 'es',
+  },
   build: {
     rollupOptions: {
       output: {

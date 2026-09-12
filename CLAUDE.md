@@ -66,6 +66,15 @@ WebSocket endpoints for streaming simulation frames:
 - `/api/ws/simulation/{id}` (frame-by-frame)
 - `/api/ws/simulation-fast/{id}` (batch all frames)
 
+### Backend selection (static deployment)
+
+`client.ts` calls `apiFetch()` (`src/api/transport.ts`), not `fetch`. `initBackend()` (`src/api/backend.ts`) probes `GET /api` once at startup and stores the result in `src/stores/backendStore.ts`:
+- `online` — a Python server answered (dev proxy or a deployment): plain `fetch`.
+- otherwise (GitHub Pages) the same FastAPI app is started **inside the browser**: `src/pyodide/worker.ts` loads Pyodide from the CDN, installs `pylinkage`, `fastapi` and the server wheel from `public/wheels/` (`npm run build:wheel`), and `asgi_bridge.py` calls the ASGI app in-process (sync endpoints run inline; Pyodide has no threads). Statuses `wasm-loading` → `wasm` / `wasm-failed`; requests made while loading wait for the worker. `VITE_WASM_BACKEND=off` disables it (`offline`).
+- While no backend answers, `ExampleLoader` serves `src/data/examples.json` (dumped by `server/scripts/dump_examples.py`, kept current by a server test) and the app opens on the Design tab (`useStaticDemo`). `BackendBanner` shows the state.
+
+`npm run test:wasm` runs the server under Pyodide in Node and hits the main routes; CI runs it in the `build` job. Do not add a server dependency without a pure-Python or Pyodide wheel (numba and uvicorn are deliberately excluded, see `src/pyodide/config.ts`).
+
 ### Synthesis Workflow
 
 Three modes: path generation, function generation, motion generation. User adds constraint points on the synthesis canvas, solves via backend API, previews 4-bar solutions, then loads a selected solution into the mechanism editor.

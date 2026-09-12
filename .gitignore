@@ -6,3 +6,6 @@ server/.venv/
 __pycache__/
 *.egg-info/
 server/linkage_data/
+
+# In-browser backend (built by `npm run build:wheel`)
+public/wheels/

@@ -1,9 +1,13 @@
+import { useEffect } from 'react';
 import { AppShell } from './components/layout/AppShell';
+import { initBackend } from './api/backend';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAutoResimulation } from './hooks/useAutoResimulation';
 import { useStaticDemo } from './hooks/useStaticDemo';
 
 function App() {
+  // Probe /api once; without a server, start the in-browser backend
+  useEffect(initBackend, []);
   // Enable keyboard shortcuts globally
   useKeyboardShortcuts();
   // Re-simulate after structural edits if loci were previously loaded

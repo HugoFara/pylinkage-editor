@@ -17,11 +17,12 @@ import type {
   OptimizationRequest,
   OptimizationResponse,
 } from '../types/optimization';
+import { apiFetch } from './transport';
 
 const API_BASE = '/api';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -56,7 +57,7 @@ export const mechanismApi = {
     }),
 
   delete: async (id: string) => {
-    const response = await fetch(`${API_BASE}/mechanisms/${id}`, {
+    const response = await apiFetch(`${API_BASE}/mechanisms/${id}`, {
       method: 'DELETE',
     });
     if (!response.ok) {
@@ -185,7 +186,7 @@ export const optimizationApi = {
 
 // Export
 async function fetchBlob(url: string, body: object): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
