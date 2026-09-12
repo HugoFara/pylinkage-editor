@@ -1,8 +1,8 @@
 """Service layer for optimization endpoints.
 
-Converts mechanism dicts to Linkage objects, builds objective functions
-from frontend specifications, runs optimization, and returns results
-as mechanism dicts.
+Builds a ``Mechanism`` from the request, an objective function from the
+frontend specification, runs one of pylinkage's optimizers on it, and returns
+every result as a mechanism dict the editor can preview and load.
 """
 
 from __future__ import annotations
@@ -14,8 +14,22 @@ from typing import Any
 import numpy as np
 from pylinkage.exceptions import UnbuildableError
 from pylinkage.linkage import bounding_box
-from pylinkage.mechanism import mechanism_from_dict
-from pylinkage.population import Member
+from pylinkage.mechanism import (
+    ArcDriverLink,
+    DriverLink,
+    GroundLink,
+    Mechanism,
+    mechanism_from_dict,
+    mechanism_to_dict,
+)
+from pylinkage.optimization import (
+    differential_evolution_optimization,
+    generate_bounds,
+    minimize_linkage,
+    particle_swarm_optimization,
+    trials_and_errors_optimization,
+)
+from pylinkage.population import Ensemble, Member
 
 from ..models.optimization_schemas import (
     ObjectiveSpec,
@@ -94,75 +108,184 @@ def _target_path_distance(
 def _build_eval_func(objective: ObjectiveSpec, minimize: bool) -> Any:
     """Build an evaluation function from an objective specification.
 
-    Returns a raw fitness function (not yet wrapped with kinematic_default_test).
-    The function signature is: (linkage, params, init_pos) -> float.
+    Returns a fitness function with pylinkage's optimizer signature,
+    ``(mechanism, constraints, initial_positions) -> float``. An unbuildable
+    candidate scores the worst possible value for the chosen direction.
     """
     error_penalty = float("inf") if minimize else -float("inf")
 
-    def eval_func(linkage: Any, params: Any, init_pos: Any) -> float:
-
+    def eval_func(mechanism: Mechanism, params: Any, init_pos: Any) -> float:
         if init_pos is not None:
-            linkage.set_coords(init_pos)
-        linkage.set_constraints(params)
+            mechanism.set_coords([tuple(p) for p in init_pos])
+        mechanism.set_constraints(list(params))
         try:
-            points = 12
-            n = linkage.get_rotation_period()
-            # Quick buildability check
-            tuple(tuple(i) for i in linkage.step(iterations=points + 1, dt=n / points))
-            # Full simulation for fitness evaluation
-            n_steps = 96
-            factor = int(points / n_steps) + 1
-            loci = tuple(tuple(i) for i in linkage.step(iterations=n_steps * factor, dt=1 / factor))
+            # One full rotation of the slowest driver, at the resolution the
+            # simulate endpoint uses, so the objective sees the whole coupler curve.
+            loci = tuple(mechanism.step())
         except UnbuildableError:
+            return error_penalty
+        if any(pos is None or pos[0] is None for step in loci for pos in step):
             return error_penalty
 
         joint_index = objective.joint_index
 
         if objective.type == "path_length":
-            score = _path_length(loci, joint_index)
-        elif objective.type == "bounding_box_area":
-            score = _bounding_box_area(loci, joint_index)
-        elif objective.type == "x_extent":
-            score = _x_extent(loci, joint_index)
-        elif objective.type == "y_extent":
-            score = _y_extent(loci, joint_index)
-        elif objective.type == "target_path":
-            score = _target_path_distance(loci, joint_index, objective.target_points)
-        else:
-            return error_penalty
-
-        return score
+            return _path_length(loci, joint_index)
+        if objective.type == "bounding_box_area":
+            return _bounding_box_area(loci, joint_index)
+        if objective.type == "x_extent":
+            return _x_extent(loci, joint_index)
+        if objective.type == "y_extent":
+            return _y_extent(loci, joint_index)
+        if objective.type == "target_path":
+            return _target_path_distance(loci, joint_index, objective.target_points)
+        return error_penalty
 
     return eval_func
 
 
-def _member_to_result(member: Member, linkage: Any, warnings: list[str]) -> OptimizationResultDTO:
-    """Convert one optimizer result to a DTO, including the updated mechanism dict."""
-    score = member.score
-    dims = list(np.asarray(member.dimensions).flat)
+def _constraint_names(mechanism: Mechanism) -> list[str]:
+    """Names of the constraint vector entries, in ``get_constraints()`` order."""
+    names: list[str] = []
+    for link in mechanism.links:
+        if isinstance(link, GroundLink):
+            continue
+        if isinstance(link, (DriverLink, ArcDriverLink)):
+            if link.radius is not None:
+                names.append(f"{link.name} (radius)")
+        elif link.length is not None:
+            names.append(f"{link.name} (length)")
+    return names
 
-    # Mechanism dict round-trip is pending the Mechanism-native
-    # optimizer rewrite — leave as None for now.
-    mechanism_dict = None
 
-    return OptimizationResultDTO(
-        score=score,
-        constraints=dims,
-        mechanism_dict=mechanism_dict,
-    )
+def _member_to_result(
+    member: Member, mechanism_dict: dict[str, Any], warnings: list[str]
+) -> OptimizationResultDTO:
+    """Convert one optimizer result to a DTO with the re-dimensioned mechanism dict.
+
+    The mechanism dict carries geometry as joint positions only, so the
+    candidate is rebuilt, given the optimized constraints, and solved once
+    without advancing the drivers (``dt=0``) to get a consistent pose.
+    """
+    dims = [float(d) for d in np.asarray(member.dimensions).flat]
+    result: dict[str, Any] | None = None
+    try:
+        mechanism = mechanism_from_dict(mechanism_dict)
+        mechanism.set_coords([tuple(p) for p in member.initial_positions])
+        mechanism.set_constraints(dims)
+        next(mechanism.step(iterations=1, dt=0.0))
+        result = mechanism_to_dict(mechanism)
+    except UnbuildableError as exc:
+        warnings.append(
+            f"Result with score {member.score:.4g} cannot be assembled ({exc}); no preview."
+        )
+    except Exception as exc:  # pragma: no cover - defensive, surfaced to the UI
+        logger.exception("Could not rebuild an optimization result")
+        warnings.append(f"Result with score {member.score:.4g} could not be rebuilt: {exc}")
+
+    return OptimizationResultDTO(score=member.score, constraints=dims, mechanism_dict=result)
+
+
+def _run_algorithm(
+    request: OptimizationRequest,
+    mechanism: Mechanism,
+    eval_func: Any,
+    center: list[float],
+    bounds: tuple[Any, Any],
+) -> Ensemble:
+    order_relation = min if request.minimize else max
+    params = request.algorithm
+
+    if params.algorithm == "pso":
+        return particle_swarm_optimization(
+            eval_func,
+            mechanism,
+            center=center,
+            n_particles=params.n_particles,
+            leader=params.leader,
+            follower=params.follower,
+            inertia=params.inertia,
+            neighbors=min(params.neighbors, params.n_particles),
+            iterations=params.iterations,
+            bounds=bounds,
+            order_relation=order_relation,
+            verbose=False,
+        )
+    if params.algorithm == "differential_evolution":
+        mutation = tuple(params.mutation) if len(params.mutation) > 1 else params.mutation[0]
+        return differential_evolution_optimization(
+            eval_func,
+            mechanism,
+            bounds=bounds,
+            order_relation=order_relation,
+            strategy=params.strategy,
+            maxiter=params.max_iterations,
+            popsize=params.population_size,
+            tol=params.tolerance,
+            mutation=mutation,
+            recombination=params.recombination,
+            seed=params.seed,
+            verbose=False,
+        )
+    if params.algorithm == "nelder_mead":
+        return minimize_linkage(
+            eval_func,
+            mechanism,
+            x0=center,
+            bounds=bounds,
+            order_relation=order_relation,
+            method="Nelder-Mead",
+            maxiter=params.max_iterations,
+            tol=params.tolerance,
+            verbose=False,
+        )
+    if params.algorithm == "grid_search":
+        return trials_and_errors_optimization(
+            eval_func,
+            mechanism,
+            parameters=center,
+            n_results=params.n_results,
+            divisions=params.divisions,
+            bounds=bounds,
+            order_relation=order_relation,
+            verbose=False,
+        )
+    raise ValueError(f"Unknown algorithm {params.algorithm!r}")
 
 
 def run_optimization(request: OptimizationRequest) -> OptimizationResponse:
-    """Run optimization on a mechanism.
+    """Optimize a mechanism's link lengths and driver radii for an objective.
 
-    The legacy ``Linkage`` bridge was removed alongside the
-    ``pylinkage.joints`` module. This endpoint will be reinstated in the
-    follow-up phase that wires the optimizers (PSO/DE/Nelder-Mead/grid)
-    against ``Mechanism`` directly.
+    Every result is returned with its constraint vector and, when the
+    optimized geometry can be assembled, a mechanism dict for preview.
     """
     mechanism = mechanism_from_dict(request.mechanism)
-    raise NotImplementedError(
-        "Optimization endpoint is being migrated to operate on Mechanism "
-        "directly; the legacy Linkage bridge has been removed. "
-        f"(received mechanism: {mechanism.name!r})"
+    if not 0 <= request.objective.joint_index < len(mechanism.joints):
+        raise ValueError(
+            f"joint_index {request.objective.joint_index} out of range for a mechanism "
+            f"with {len(mechanism.joints)} joints"
+        )
+    center = list(mechanism.get_constraints())
+    if not center:
+        raise ValueError("Mechanism has no optimizable dimension (no driver or binary link)")
+    constraint_names = _constraint_names(mechanism)
+
+    eval_func = _build_eval_func(request.objective, request.minimize)
+    bounds = generate_bounds(
+        center, min_ratio=request.bounds_factor, max_factor=request.bounds_factor
+    )
+    ensemble = _run_algorithm(request, mechanism, eval_func, center, bounds)
+
+    warnings: list[str] = []
+    results = [_member_to_result(member, request.mechanism, warnings) for member in ensemble]
+    scores = [r.score for r in results if math.isfinite(r.score)]
+    if not scores:
+        warnings.append("No candidate could be assembled; try a smaller bounds factor.")
+    best_score = (min(scores) if request.minimize else max(scores)) if scores else None
+
+    return OptimizationResponse(
+        results=results,
+        best_score=best_score,
+        constraint_names=constraint_names,
+        warnings=warnings,
     )
