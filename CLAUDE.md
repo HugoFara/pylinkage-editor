@@ -61,6 +61,7 @@ Server code in `server/pylinkage_editor_server/` (routers → services → pylin
 - **Simulation**: `/api/mechanisms/{id}/simulate`, `/trajectory`, `/rotation-period`
 - **Examples**: `/api/examples` (list, get, load)
 - **Synthesis**: `/api/synthesis/{path,function,motion}-generation`
+- **Optimization**: `/api/optimization` — runs pylinkage's PSO / differential evolution / Nelder-Mead / grid search directly on the `Mechanism` (it implements the optimizer contract `get_constraints`/`set_constraints`/`get_coords`/`set_coords`/`step`); needs pylinkage >= 1.2.2, where `Mechanism.set_constraints` actually changes the solved geometry. The constraint vector is driver radii + binary link lengths; `joint_index` counts the request dict's joints. Each result comes back with a `mechanism_dict` (rebuilt with the optimized dimensions and solved once with `dt=0`) for preview and "Send to Design".
 
 WebSocket endpoints for streaming simulation frames:
 - `/api/ws/simulation/{id}` (frame-by-frame)

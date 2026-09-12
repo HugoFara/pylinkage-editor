@@ -16,7 +16,7 @@ export const PYODIDE_PACKAGES = ['numpy', 'scipy', 'micropip'];
  * (the worker calls the ASGI app directly) and pylinkage's `numba` extra.
  */
 export const PYPI_REQUIREMENTS = [
-  'pylinkage[scipy,svg]>=1.2.1,<2',
+  'pylinkage[scipy,svg]>=1.2.2,<2',
   'fastapi>=0.109.0',
   'pydantic-settings>=2.1.0',
 ];

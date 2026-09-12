@@ -4,7 +4,9 @@
  * route that needs threads before it reaches the GitHub Pages demo.
  *
  * Needs `npm run build:wheel` first. Downloads the Pyodide packages from the
- * CDN on the first run (cached in node_modules afterwards).
+ * CDN on the first run (cached in node_modules afterwards). Set
+ * PYLINKAGE_WHEEL=/path/to/pylinkage-x.y.z-py3-none-any.whl to test against
+ * an unreleased pylinkage instead of the PyPI release config.ts pins.
  */
 
 import { readFileSync } from 'node:fs';
@@ -41,7 +43,19 @@ const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
 const pyodide = await loadPyodide();
 await pyodide.loadPackage(PYODIDE_PACKAGES);
 const micropip = pyodide.pyimport('micropip');
-await micropip.install(PYPI_REQUIREMENTS);
+const pylinkageWheel = process.env.PYLINKAGE_WHEEL;
+if (pylinkageWheel) {
+  const name = pylinkageWheel.split('/').pop();
+  pyodide.FS.writeFile(`/${name}`, readFileSync(pylinkageWheel));
+  console.log(`using local ${name}`);
+  await micropip.install([
+    `emfs:/${name}`,
+    'drawsvg', // the svg extra; scipy is already loaded above
+    ...PYPI_REQUIREMENTS.filter((r) => !r.startsWith('pylinkage')),
+  ]);
+} else {
+  await micropip.install(PYPI_REQUIREMENTS);
+}
 pyodide.FS.writeFile(`/${manifest.wheel}`, readFileSync(join(root, 'public/wheels', manifest.wheel)));
 await micropip.install.callKwargs(`emfs:/${manifest.wheel}`, { deps: false });
 console.log(`runtime ready in ${elapsed()}`);
@@ -74,7 +88,7 @@ const simulated = expect(
 );
 if (!simulated.frames?.length) throw new Error('simulation returned no frames');
 const mechanism = expect('GET /api/examples/four-bar', await call('GET', '/api/examples/four-bar'));
-expect('POST /api/mechanisms/simulate', await call('POST', '/api/mechanisms/simulate', { mechanism, dt: 1.0 }));
+const direct = expect('POST /api/mechanisms/simulate', await call('POST', '/api/mechanisms/simulate', { mechanism, dt: 1.0 }));
 const synthesis = expect(
   'POST /api/synthesis/path-generation',
   await call('POST', '/api/synthesis/path-generation', {
@@ -90,6 +104,30 @@ expect(
     precision_points: [{ x: 0, y: 0 }, { x: 10, y: 5 }, { x: 20, y: 0 }],
   }),
 );
+const jointId = 'coupler.1_rocker.0';
+const xExtent = (simulation) => {
+  const index = simulation.joint_names.indexOf(jointId);
+  const xs = simulation.frames.map((frame) => frame.positions[index].x);
+  return Math.max(...xs) - Math.min(...xs);
+};
+const optimized = expect(
+  'POST /api/optimization',
+  await call('POST', '/api/optimization', {
+    mechanism,
+    objective: { type: 'x_extent', joint_index: mechanism.joints.findIndex((j) => j.id === jointId) },
+    algorithm: { algorithm: 'pso', n_particles: 8, iterations: 8 },
+    bounds_factor: 2.0,
+  }),
+);
+const preview = optimized.results?.[0]?.mechanism_dict;
+if (!preview) throw new Error(`optimization returned no preview: ${JSON.stringify(optimized.warnings)}`);
+const previewRun = expect(
+  'POST /api/mechanisms/simulate (optimized)',
+  await call('POST', '/api/mechanisms/simulate', { mechanism: preview, dt: 1.0 }),
+);
+if (!(xExtent(previewRun) > xExtent(direct))) {
+  throw new Error(`optimization did not widen the stroke: ${xExtent(previewRun)} vs ${xExtent(direct)}`);
+}
 const svg = expect('POST /api/export/svg', await call('POST', '/api/export/svg', mechanism), 200, false);
 if (!svg.startsWith('<?xml')) throw new Error('svg export did not return XML');
 expect('GET /api/nope (404)', await call('GET', '/api/nope'), 404);
