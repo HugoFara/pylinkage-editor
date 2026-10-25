@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selected joints (removes joint + all connected links). Auto-resimulation
   re-runs the simulation after structural edits when loci were loaded.
 
+
+### Changed
+
+- **Dependencies are current.** React 19 (with react-konva 19), Konva 10,
+  Vite 8, ESLint 10, zustand 5 and TypeScript 6.0; Pyodide 314.0.7 for the
+  in-browser backend. Konva 10 places canvas text the way the DOM does, so
+  labels sit about a pixel lower. TypeScript 7 waits on typescript-eslint,
+  which accepts TypeScript below 6.1.
+- **The server requires Python 3.11**, as pylinkage 1.3.0 does, and its lock
+  takes pylinkage 1.3.0, FastAPI 0.162 and uvicorn 0.54.
+- CI runs on Node 24 (Node 20 reached end of life in April 2026) with
+  current versions of its actions.
+
 ## [0.1.0] - 2026-03-29
 
 Initial release of pylinkage-editor — a visual planar linkage design and
