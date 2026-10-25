@@ -4,7 +4,7 @@
  * and previews the selected optimization result.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type JSX } from 'react';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useOptimizationStore } from '../../stores/optimizationStore';

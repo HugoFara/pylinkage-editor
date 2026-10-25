@@ -88,7 +88,7 @@ export function AnimationControls() {
   const setLoci = useMechanismStore((s) => s.setLoci);
   const updateBuildableStatus = useMechanismStore((s) => s.updateBuildableStatus);
 
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
 
   // REST API simulation mutation (with client-side fallback)
   const simulateMutation = useMutation({

@@ -3,7 +3,7 @@
  * Updated for link-first approach with thick solid links.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type JSX } from 'react';
 import { Stage, Layer, Line, Circle, Text, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useEditorStore } from '../../stores/editorStore';
@@ -301,7 +301,7 @@ export function LinkageCanvas() {
   };
 
   // Handle stage click
-  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Only handle clicks on the stage itself (empty space)
     if (e.target !== e.target.getStage()) return;
 
