@@ -5,7 +5,7 @@
  * Supports zoom (wheel), pan (middle-click drag), and dynamic grid.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type JSX } from 'react';
 import { Stage, Layer, Line, Circle, Text, Arrow, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useSynthesisStore } from '../../stores/synthesisStore';
