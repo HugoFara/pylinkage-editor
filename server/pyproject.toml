@@ -7,7 +7,7 @@ name = "pylinkage-editor-server"
 version = "0.1.0"
 description = "Python backend for pylinkage-editor: simulation, synthesis and export over HTTP"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "pylinkage[numba,scipy,svg]>=1.2.0",
@@ -38,7 +38,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

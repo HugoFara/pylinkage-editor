@@ -1,7 +1,7 @@
 """In-memory storage backend for linkages."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -14,7 +14,7 @@ class MemoryStorage:
     def create(self, linkage_data: dict[str, Any]) -> str:
         """Create a new linkage and return its ID."""
         linkage_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self._linkages[linkage_id] = {
             "id": linkage_id,
             "created_at": now,
@@ -32,7 +32,7 @@ class MemoryStorage:
         if linkage_id not in self._linkages:
             return False
         self._linkages[linkage_id].update(data)
-        self._linkages[linkage_id]["updated_at"] = datetime.now(timezone.utc)
+        self._linkages[linkage_id]["updated_at"] = datetime.now(UTC)
         return True
 
     def delete(self, linkage_id: str) -> bool:
