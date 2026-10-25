@@ -4,7 +4,7 @@
  */
 
 /** Pyodide release; the Node check asserts the npm devDependency matches. */
-export const PYODIDE_VERSION = '314.0.6';
+export const PYODIDE_VERSION = '314.0.7';
 export const PYODIDE_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 /** Compiled packages shipped by Pyodide itself. */
